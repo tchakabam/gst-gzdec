@@ -56,6 +56,8 @@
  * </refsect2>
  */
 
+#include <zlib.h>
+
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
 #endif
