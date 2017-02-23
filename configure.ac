@@ -7,7 +7,7 @@ AC_INIT([my-plugin-package],[1.0.0])
 dnl required versions of gstreamer, plugins-base and 3rd party deps
 GST_REQUIRED=1.0.0
 GSTPB_REQUIRED=1.0.0
-ZLIB_REQUIRED=1.2.9
+ZLIB_REQUIRED=1.2.8
 
 AC_CONFIG_SRCDIR([src/gstgzdec.c])
 AC_CONFIG_HEADERS([config.h])
@@ -43,8 +43,10 @@ dnl for libgstinterfaces-1.0: gstreamer-interfaces-1.0 >= $GST_REQUIRED
 dnl for libgstrtp-1.0: gstreamer-rtp-1.0 >= $GST_REQUIRED
 dnl for libgstrtsp-1.0: gstreamer-rtsp-1.0 >= $GST_REQUIRED
 dnl etc.
+
+dnl check for dependencies (pkg-config)
+
 PKG_CHECK_MODULES(GST, [
-  zlib >= $ZLIB_REQUIRED
   gstreamer-1.0 >= $GST_REQUIRED
   gstreamer-base-1.0 >= $GST_REQUIRED
   gstreamer-controller-1.0 >= $GST_REQUIRED
@@ -55,13 +57,23 @@ PKG_CHECK_MODULES(GST, [
 ], [
   AC_MSG_ERROR([
 
-      You need to have installed a zlib version greater than $ZLIB_REQUIRED.
-
-      You might need to install or upgrade the GStreamer development
+      You need to install or upgrade the GStreamer development
       packages on your system. On debian-based systems these are
       libgstreamer1.0-dev and libgstreamer-plugins-base1.0-dev.
       on RPM-based systems gstreamer1.0-devel, libgstreamer1.0-devel
       or similar. The minimum version required is $GST_REQUIRED.
+  ])
+])
+
+PKG_CHECK_MODULES(ZLIB, [
+  zlib >= $ZLIB_REQUIRED
+], [
+  AC_SUBST(GST_CFLAGS)
+  AC_SUBST(GST_LIBS)
+], [
+  AC_MSG_ERROR([
+
+      You need to have installed a zlib version greater than $ZLIB_REQUIRED.
   ])
 ])
 

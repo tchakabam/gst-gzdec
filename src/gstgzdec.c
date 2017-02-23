@@ -2,7 +2,7 @@
  * GStreamer
  * Copyright (C) 2005 Thomas Vander Stichele <thomas@apestaart.org>
  * Copyright (C) 2005 Ronald S. Bultje <rbultje@ronald.bitfreak.net>
- * Copyright (C) 2017 Stephan Hesse <<user@hostname.org>>
+ * Copyright (C) 2017 Stephan Hesse <<disparat@gmail.com>>
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -56,6 +56,10 @@
  * </refsect2>
  */
 
+#include <string.h>
+//#include <stdio.h>
+#include <stdlib.h>
+
 #include <zlib.h>
 
 #ifdef HAVE_CONFIG_H
@@ -69,6 +73,8 @@
 GST_DEBUG_CATEGORY_STATIC (gst_gz_dec_debug);
 #define GST_CAT_DEFAULT gst_gz_dec_debug
 
+#include "gstgzdec_priv.h"
+
 /* Filter signals and args */
 enum
 {
@@ -79,7 +85,9 @@ enum
 enum
 {
   PROP_0,
-  PROP_SILENT
+  PROP_ENABLED,
+  PROP_BYTES,
+  PROP_USE_WORKER
 };
 
 /* the capabilities of the inputs and outputs.
@@ -109,35 +117,45 @@ static void gst_gz_dec_get_property (GObject * object, guint prop_id,
 static gboolean gst_gz_dec_sink_event (GstPad * pad, GstObject * parent, GstEvent * event);
 static GstFlowReturn gst_gz_dec_chain (GstPad * pad, GstObject * parent, GstBuffer * buf);
 
+static GstStateChangeReturn
+gst_gz_dec_change_state (GstElement *element, GstStateChange transition);
+
 /* GObject vmethod implementations */
 
 /* initialize the gzdec's class */
 static void
 gst_gz_dec_class_init (GstGzDecClass * klass)
 {
-  GObjectClass *gobject_class;
-  GstElementClass *gstelement_class;
-
-  gobject_class = (GObjectClass *) klass;
-  gstelement_class = (GstElementClass *) klass;
+  GObjectClass *gobject_class = (GObjectClass *) klass;
+  GstElementClass *gstelement_class = (GstElementClass *) klass;
 
   gobject_class->set_property = gst_gz_dec_set_property;
   gobject_class->get_property = gst_gz_dec_get_property;
 
-  g_object_class_install_property (gobject_class, PROP_SILENT,
-      g_param_spec_boolean ("silent", "Silent", "Produce verbose output ?",
-          FALSE, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_BYTES,
+      g_param_spec_uint ("bytes", "Bytes", "Count of processed bytes",
+          0, G_MAXUINT,0, G_PARAM_READABLE));
+
+  g_object_class_install_property (gobject_class, PROP_ENABLED,
+      g_param_spec_boolean ("enabled", "Enabled", "Enable decoding",
+          TRUE, G_PARAM_READWRITE));
+
+  g_object_class_install_property (gobject_class, PROP_ENABLED,
+      g_param_spec_boolean ("use-worker", "Use worker", "Use worker for decoding",
+          TRUE, G_PARAM_READWRITE));
 
   gst_element_class_set_details_simple(gstelement_class,
-    "GzDec",
+    "Gzip decoder",
     "FIXME:Generic",
     "FIXME:Generic Template Element",
-    "Stephan Hesse <<user@hostname.org>>");
+    "Stephan Hesse <disparat@gmail.com>");
 
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&src_factory));
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&sink_factory));
+
+  gstelement_class->change_state = gst_gz_dec_change_state;
 }
 
 /* initialize the new element
@@ -160,7 +178,23 @@ gst_gz_dec_init (GstGzDec * filter)
   GST_PAD_SET_PROXY_CAPS (filter->srcpad);
   gst_element_add_pad (GST_ELEMENT (filter), filter->srcpad);
 
-  filter->silent = FALSE;
+  filter->use_worker = TRUE;
+  filter->use_async_push = TRUE;
+  filter->error = FALSE;
+  filter->enabled = TRUE;
+  filter->bytes = 0;
+  filter->input_buffers = NULL;
+  filter->output_buffers = NULL;
+
+  MUTEX_INIT(&filter->input_buffers_mutex);
+  MUTEX_INIT(&filter->output_buffers_mutex);
+  MUTEX_INIT(&filter->decode_worker_mutex);
+
+  GST_DEBUG_OBJECT(filter, "Element address: %p", filter);
+
+  filter->decode_worker = CREATE_TASK(decode_worker_func, filter);
+
+  gst_task_set_lock(filter->decode_worker, &filter->decode_worker_mutex);
 }
 
 static void
@@ -170,8 +204,12 @@ gst_gz_dec_set_property (GObject * object, guint prop_id,
   GstGzDec *filter = GST_GZDEC (object);
 
   switch (prop_id) {
-    case PROP_SILENT:
-      filter->silent = g_value_get_boolean (value);
+
+    case PROP_USE_WORKER:
+      filter->use_worker = g_value_get_boolean (value);
+      break;
+    case PROP_ENABLED:
+      filter->enabled = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -186,13 +224,56 @@ gst_gz_dec_get_property (GObject * object, guint prop_id,
   GstGzDec *filter = GST_GZDEC (object);
 
   switch (prop_id) {
-    case PROP_SILENT:
-      g_value_set_boolean (value, filter->silent);
+    case PROP_USE_WORKER:
+      g_value_set_boolean (value, filter->use_worker);
+      break;
+    case PROP_ENABLED:
+      g_value_set_boolean (value, filter->enabled);
+      break;
+    case PROP_BYTES:
+      g_value_set_uint (value, filter->bytes);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
+}
+
+static GstStateChangeReturn
+gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
+{
+  GstGzDec *filter = GST_GZDEC (element);
+
+  GstState current = GST_STATE_TRANSITION_CURRENT(transition);
+  GstState next = GST_STATE_TRANSITION_NEXT(transition);
+
+  GST_DEBUG_OBJECT (element, "Transition from %s to %s", 
+    gst_element_state_get_name (current), 
+    gst_element_state_get_name (next));
+
+  switch(transition) {
+  case GST_STATE_CHANGE_NULL_TO_READY:
+    gst_task_pause(filter->decode_worker);
+    GST_OBJECT_LOCK(filter);
+    filter->eos = FALSE;
+    filter->pending_eos = NULL;
+    GST_OBJECT_UNLOCK(filter);
+    break;
+  case GST_STATE_CHANGE_READY_TO_PAUSED:
+    break;
+  case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
+    break;
+  case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+    break;
+  case GST_STATE_CHANGE_PAUSED_TO_READY:
+    gst_task_pause(filter->decode_worker);
+    break;
+  case GST_STATE_CHANGE_READY_TO_NULL:
+    gst_task_join(filter->decode_worker);
+    break;
+  }
+
+  return GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
 }
 
 /* GstElement vmethod implementations */
@@ -201,29 +282,33 @@ gst_gz_dec_get_property (GObject * object, guint prop_id,
 static gboolean
 gst_gz_dec_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 {
-  GstGzDec *filter;
+  GstGzDec *filter = GST_GZDEC (parent);
   gboolean ret;
-
-  filter = GST_GZDEC (parent);
 
   GST_LOG_OBJECT (filter, "Received %s event: %" GST_PTR_FORMAT,
       GST_EVENT_TYPE_NAME (event), event);
 
   switch (GST_EVENT_TYPE (event)) {
-    case GST_EVENT_CAPS:
-    {
-      GstCaps * caps;
+  case GST_EVENT_EOS:
+    //ret = gst_pad_event_default (pad, parent, event);
+    GST_OBJECT_LOCK(filter);
+    filter->pending_eos = event;
+    // FIXME: seems like eos and pending_eos are state-redundant
+    filter->eos = TRUE;
+    GST_OBJECT_UNLOCK(filter);
+    ret = TRUE;
+    break;
+  case GST_EVENT_CAPS:
+  {
+    GstCaps * caps;
+    gst_event_parse_caps (event, &caps);
 
-      gst_event_parse_caps (event, &caps);
-      /* do something with the caps */
-
-      /* and forward */
-      ret = gst_pad_event_default (pad, parent, event);
-      break;
-    }
-    default:
-      ret = gst_pad_event_default (pad, parent, event);
-      break;
+    ret = gst_pad_event_default (pad, parent, event);
+    break;
+  }
+  default:
+    ret = gst_pad_event_default (pad, parent, event);
+    break;
   }
   return ret;
 }
@@ -238,11 +323,26 @@ gst_gz_dec_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
   filter = GST_GZDEC (parent);
 
-  if (filter->silent == FALSE)
-    g_print ("I'm plugged, therefore I'm in.\n");
+  GST_TRACE_OBJECT(filter, "Entering chain function");
+
+  // once task is paused sooner or later
+  // we should be able to take the worker lock
+  GST_TRACE_OBJECT(filter, "Appending input buffer of %d bytes", (int) GST_BUFFER_SIZE(buf));
+  append_buffer(filter, buf);
+  // To avoid any races between the task feeding us here
+  // and the worker thread let's set the state to started
+  // and then only release the lock.
+
+  GstTaskState worker_state = gst_task_get_state (filter->decode_worker); 
+  if (worker_state != GST_TASK_STARTED) {
+    GST_TRACE_OBJECT(filter, "Starting up task");
+    gst_task_start(filter->decode_worker);    
+  }
+
+  GST_TRACE_OBJECT(filter, "Leaving chain function");
 
   /* just push out the incoming buffer without touching it */
-  return gst_pad_push (filter->srcpad, buf);
+  return GST_FLOW_OK;
 }
 
 
