@@ -87,24 +87,32 @@
 
 #if USE_GSTATIC_REC_MUTEX
 	typedef GStaticRecMutex MUTEX;
-	#define MUTEX_LOCK g_static_rec_mutex_lock
-  #define MUTEX_UNLOCK g_static_rec_mutex_unlock
-	#define MUTEX_INIT g_static_rec_mutex_init
+	#define REC_MUTEX_LOCK g_static_rec_mutex_lock
+  #define REC_MUTEX_UNLOCK g_static_rec_mutex_unlock
+	#define REC_MUTEX_INIT g_static_rec_mutex_init
 #else
 	typedef GRecMutex MUTEX;
-	#define MUTEX_LOCK g_rec_mutex_lock
-  #define MUTEX_UNLOCK g_rec_mutex_unlock
-	#define MUTEX_INIT g_rec_mutex_init
+	#define REC_MUTEX_LOCK g_rec_mutex_lock
+  #define REC_MUTEX_UNLOCK g_rec_mutex_unlock
+	#define REC_MUTEX_INIT g_rec_mutex_init
 #endif
 
-#define WORKER_TASK_LOCK(element) MUTEX_LOCK(&element->input_task_mutex)
-#define WORKER_TASK_UNLOCK(element) MUTEX_UNLOCK(&element->input_task_mutex)
+#define INPUT_TASK_LOCK(element) REC_MUTEX_LOCK(&element->input_task_mutex)
+#define INPUT_TASK_UNLOCK(element) REC_MUTEX_UNLOCK(&element->input_task_mutex)
+#define SRCPAD_TASK_LOCK(element) REC_MUTEX_LOCK(GST_PAD_GET_STREAM_LOCK(&element->srcpad))
+#define SRCPAD_TASK_UNLOCK(element) REC_MUTEX_UNLOCK(GST_PAD_GET_STREAM_LOCK(&element->srcpad))
 
-#define INPUT_QUEUE_LOCK(element) MUTEX_LOCK(&element->input_queue_mutex)
-#define INPUT_QUEUE_UNLOCK(element) MUTEX_UNLOCK(&element->input_queue_mutex)
+#define INPUT_QUEUE_WAIT(element) g_cond_wait(&element->input_queue_run_cond, &filter->input_queue_mutex)
+#define INPUT_QUEUE_SIGNAL(element) g_cond_signal(&element->input_queue_run_cond)
 
-#define OUTPUT_QUEUE_LOCK(element) MUTEX_LOCK(&element->output_queue_mutex)
-#define OUTPUT_QUEUE_UNLOCK(element) MUTEX_UNLOCK(&element->output_queue_mutex)
+#define OUTPUT_QUEUE_WAIT(element) g_cond_wait(&element->output_queue_run_cond, &filter->output_queue_mutex)
+#define OUTPUT_QUEUE_SIGNAL(element) g_cond_signal(&element->output_queue_run_cond)
+
+#define INPUT_QUEUE_LOCK(element) g_mutex_lock(&element->input_queue_mutex)
+#define INPUT_QUEUE_UNLOCK(element) g_mutex_unlock(&element->input_queue_mutex)
+
+#define OUTPUT_QUEUE_LOCK(element) g_mutex_lock(&element->output_queue_mutex)
+#define OUTPUT_QUEUE_UNLOCK(element) g_mutex_unlock(&element->output_queue_mutex)
 
 G_BEGIN_DECLS
 
@@ -135,8 +143,11 @@ struct _GstGzDec
   GstTask *input_task;
   MUTEX input_task_mutex;
 
-  MUTEX input_queue_mutex;
-  MUTEX output_queue_mutex;
+  GCond output_queue_run_cond;
+  GCond input_queue_run_cond;
+
+  GMutex input_queue_mutex;
+  GMutex output_queue_mutex;
 
   GstEvent* pending_eos;
 

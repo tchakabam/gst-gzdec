@@ -25,10 +25,8 @@ void push_one_output_buffer (GstGzDec* filter, GstBuffer* buf) {
 
 void srcpad_check_pending_eos (GstGzDec* filter) {
 	GstEvent *event = NULL;
-	gboolean use_async_push;
 
 	GST_OBJECT_LOCK(filter);
-	use_async_push = filter->use_async_push;
 	// We received an EOS event AND have processed everything
 	// on the input queue (after EOS received in sync with data-flow, no more data can arrive in input queue).
 	// Now we can dispatch the pending EOS event!
@@ -44,10 +42,7 @@ void srcpad_check_pending_eos (GstGzDec* filter) {
 			GST_WARNING_OBJECT(filter, "Failed to propagate pending EOS event: %" GST_PTR_FORMAT, event);
 		}
 
-		if (use_async_push) {
-			gst_pad_pause_task (filter->srcpad);
-		}
-		
+		gst_pad_pause_task (filter->srcpad);
 	}
 }
 
@@ -71,10 +66,17 @@ void srcpad_task_func(gpointer user_data) {
 	}
 
 	// output queue is currently empty, check if we should send EOS
-	if ((data && (size - 1 == 0)) || !data) {
-		//GST_DEBUG_OBJECT (filter, "Data: %p, Size: %d", data, (int) size);
+	OUTPUT_QUEUE_LOCK(filter);
+	size = g_queue_get_length (filter->output_queue);
+	while (size == 0) {
+		// check if its time to EOS really
 		srcpad_check_pending_eos(filter);
+		// anyway if the queue is empty we'll just wait
+		GST_INFO_OBJECT (filter, "Waiting in srcpad task func");
+		OUTPUT_QUEUE_WAIT(filter);
+		GST_INFO_OBJECT(filter, "Resuming srcpad task func");
 	}
+	OUTPUT_QUEUE_UNLOCK(filter);
 
 	GST_TRACE_OBJECT (filter, "Leaving srcpad task func");
 }
@@ -115,10 +117,7 @@ void input_task_func (gpointer data) {
 
 	GST_DEBUG_OBJECT(filter, "Waiting for queue access ...");
 
-	INPUT_QUEUE_LOCK(filter);
 	buf = input_queue_pop_buffer (filter);
- 	INPUT_QUEUE_UNLOCK(filter);
-
  	if (buf != NULL) {
 		process_one_input_buffer(filter, buf);	
 	} else {
@@ -128,9 +127,18 @@ void input_task_func (gpointer data) {
 		// We are at EOS.
 		if (filter->pending_eos) {
 			filter->eos = TRUE;
-			gst_task_pause(filter->input_task);
 		}
 		GST_OBJECT_UNLOCK(filter);
+
+		// Wait around empty queue condition
+		INPUT_QUEUE_LOCK(filter);
+		while(g_queue_get_length(filter->input_queue) == 0) {
+			GST_INFO_OBJECT(filter, "Waiting in input task func");
+			INPUT_QUEUE_WAIT(filter);
+			GST_INFO_OBJECT(filter, "Resuming input task func");
+		}
+		INPUT_QUEUE_UNLOCK(filter);
+		
 	}
 
 	GST_TRACE_OBJECT(filter, "Leaving input task function");
@@ -156,6 +164,7 @@ void input_queue_append_buffer (GstGzDec *filter, GstBuffer* buf) {
 	GST_DEBUG_OBJECT (filter, "Appending data to input buffer");
 	g_queue_push_tail (filter->input_queue, gst_buffer_ref(buf));
 	GST_DEBUG_OBJECT(filter, "Input queue length after append: %d", (int) g_queue_get_length (filter->input_queue));
+	INPUT_QUEUE_SIGNAL(filter);
 	INPUT_QUEUE_UNLOCK(filter);
 }
 
@@ -168,6 +177,7 @@ void output_queue_append_data (GstGzDec *filter, gpointer data, gsize bytes) {
 
 	OUTPUT_QUEUE_LOCK(filter);
 	g_queue_push_tail (filter->output_queue, buf);
+	OUTPUT_QUEUE_SIGNAL(filter);
 	OUTPUT_QUEUE_UNLOCK(filter);
 }
 

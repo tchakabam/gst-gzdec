@@ -191,9 +191,12 @@ gst_gz_dec_init (GstGzDec * filter)
   filter->output_queue = g_queue_new();
 
   // Init locks
-  MUTEX_INIT(&filter->input_queue_mutex);
-  MUTEX_INIT(&filter->output_queue_mutex);
-  MUTEX_INIT(&filter->input_task_mutex);
+  g_mutex_init(&filter->input_queue_mutex);
+  g_mutex_init(&filter->output_queue_mutex);
+  REC_MUTEX_INIT(&filter->input_task_mutex);
+
+  g_cond_init(&filter->input_queue_run_cond);
+  g_cond_init(&filter->output_queue_run_cond);
 
   // Create input task
   filter->input_task = CREATE_TASK(input_task_func, filter);
@@ -272,38 +275,48 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
 
     // WEIRD!!!! we need this to startup, but it should only be necessary in PLAYING state, no?
     if (use_async_push) {
-      GST_TRACE_OBJECT (filter, "Scheduling async push (starting srcpad task)");
+      GST_INFO_OBJECT (filter, "Scheduling async push (starting srcpad task)");
       gst_pad_start_task (filter->srcpad, srcpad_task_func, filter, NULL); 
     }
     break;
   case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
     // We're playing, start srcpad streaming task!
     if (use_async_push) {
-      GST_TRACE_OBJECT (filter, "Scheduling async push (starting srcpad task)");
+      GST_INFO_OBJECT (filter, "Scheduling async push (starting srcpad task)");
       gst_pad_start_task (filter->srcpad, srcpad_task_func, filter, NULL); 
     }
     break;
   case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
     // Pausing srcpad streaming task (this will be syncroneous!)
     if (use_async_push) {
-      GST_TRACE_OBJECT (filter, "Setting srcpad task to paused");
+      GST_INFO_OBJECT (filter, "Setting srcpad task to paused");
       // this will actually 
-      gst_pad_pause_task (filter->srcpad);    
+      gst_pad_pause_task (filter->srcpad);
+      OUTPUT_QUEUE_LOCK(filter);
+      OUTPUT_QUEUE_SIGNAL(filter);
+      OUTPUT_QUEUE_UNLOCK(filter);
     }
     break;
   case GST_STATE_CHANGE_PAUSED_TO_READY:
     // Pause input processing worker
     gst_task_pause(filter->input_task);
+    INPUT_QUEUE_LOCK(filter);
+    INPUT_QUEUE_SIGNAL(filter);
+    INPUT_QUEUE_UNLOCK(filter);
     break;
   case GST_STATE_CHANGE_READY_TO_NULL:
     // This will actually join all the task threads
     // (but the task are re-usable)
     if (filter->use_async_push) {
-      GST_TRACE_OBJECT (filter, "Setting srcpad task to paused");
+      GST_INFO_OBJECT (filter, "Setting srcpad task to paused");
       // this will actually 
-      gst_pad_stop_task (filter->srcpad);    
+      gst_pad_stop_task (filter->srcpad);
+      OUTPUT_QUEUE_SIGNAL(filter); 
     }
     gst_task_join(filter->input_task);
+    INPUT_QUEUE_LOCK(filter);
+    INPUT_QUEUE_SIGNAL(filter);
+    INPUT_QUEUE_UNLOCK(filter);
     break;
   }
 
