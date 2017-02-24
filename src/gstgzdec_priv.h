@@ -164,13 +164,6 @@ void process_one_input_buffer (GstGzDec* filter, GstBuffer* buf) {
 
 	GST_TRACE_OBJECT (filter, "Processing one input buffer: %" GST_PTR_FORMAT, buf);
 
-	// FIXME: why again?
-	/*
-	if (G_UNLIKELY(filter->error)) {
-		return;
-	}
-	*/
-
 	// DO ACTUAL PROCESSING HERE!!
 
 	do_work_on_buffer_unlocked(filter, buf);
@@ -183,6 +176,7 @@ void input_task_func (gpointer data) {
 
  	GstGzDec *filter = GST_GZDEC (data);
  	GstBuffer* buf;
+ 	gboolean eos = FALSE;
 
 	GST_TRACE_OBJECT(filter, "Entering input task function");
 
@@ -198,19 +192,15 @@ void input_task_func (gpointer data) {
 		// We are at EOS.
 		if (filter->pending_eos) {
 			GST_INFO_OBJECT(filter, "Setting EOS flag");
-			filter->eos = TRUE;
+			eos = filter->eos = TRUE;
 		}
 		GST_OBJECT_UNLOCK(filter);
 
 		// we should signal EOS to srcpad queue
 		// only after releasing the object lock
 		// since the srcpad task might wait for it as well
-		if (filter->eos) {
-			OUTPUT_QUEUE_LOCK(filter);
-			// the srcpad queue might be empty now!
-			filter->srcpad_task_resume = TRUE;
-			OUTPUT_QUEUE_SIGNAL(filter);
-			OUTPUT_QUEUE_UNLOCK(filter);
+		if (eos) {
+			output_queue_signal_resume(filter);
 		}
 
 		// Wait around empty queue condition
@@ -221,6 +211,7 @@ void input_task_func (gpointer data) {
 			INPUT_QUEUE_WAIT(filter);
 			GST_INFO_OBJECT(filter, "Resuming input task func");
 		}
+		// reset resume flag in case it was set before signal
 		filter->input_task_resume = FALSE;
 		INPUT_QUEUE_UNLOCK(filter);
 	}

@@ -282,6 +282,7 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
     srcpad_task_start(filter);
     break;
   case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+    // this will be syncroneous
     srcpad_task_pause(filter);
     break;
   case GST_STATE_CHANGE_PAUSED_TO_READY:
@@ -289,7 +290,7 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
     // case we want to pause the srcpad task from here!
     // Pausing srcpad streaming task (this will be syncroneous!)
     srcpad_task_pause(filter);
-    // Pause input processing worker
+    // Pause input processing worker (blocking/sync)
     input_task_pause(filter);
     break;
   case GST_STATE_CHANGE_READY_TO_NULL:
@@ -321,7 +322,8 @@ gst_gz_dec_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
     filter->pending_eos = event;
     GST_OBJECT_UNLOCK(filter);
     // the queue might be waiting at this point
-
+    // even if there is no data to process
+    // we want it to pick up this EOS signal
     input_queue_signal_resume (filter);
 
     ret = TRUE;
