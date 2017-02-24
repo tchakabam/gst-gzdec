@@ -310,14 +310,19 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
     break;
   case GST_STATE_CHANGE_READY_TO_NULL:
     // This will actually join all the task threads
-    // (but the task are re-usable)
+    // (but the tasks are re-usable)
     if (filter->use_async_push) {
       GST_INFO_OBJECT (filter, "Setting srcpad task to paused");
+      // this looks hackish but we can't use 
+      // the actual pad function as it will
+      // need to acquire the task lock which
+      // will only be released after we signaled the task
       gst_task_stop (GST_PAD_TASK(filter->srcpad));
       OUTPUT_QUEUE_LOCK(filter);
       filter->srcpad_task_resume = TRUE;
       OUTPUT_QUEUE_SIGNAL(filter);
       OUTPUT_QUEUE_UNLOCK(filter);
+      // properly shutdown the pad task here now
       gst_pad_stop_task(filter->srcpad);
     }
     gst_task_stop(filter->input_task);
@@ -352,6 +357,8 @@ gst_gz_dec_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
     GST_OBJECT_UNLOCK(filter);
     // the queue might be waiting at this point
     INPUT_QUEUE_LOCK(filter);
+    // the queue might be empty
+    filter->input_task_resume = TRUE;
     INPUT_QUEUE_SIGNAL(filter);
     INPUT_QUEUE_UNLOCK(filter);
     ret = TRUE;

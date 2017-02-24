@@ -132,6 +132,9 @@ void input_task_func (gpointer data) {
 		}
 		GST_OBJECT_UNLOCK(filter);
 
+		// we should signal EOS to srcpad queue
+		// only after releasing the object lock
+		// since the srcpad task might wait for it as well
 		if (filter->eos) {
 			OUTPUT_QUEUE_LOCK(filter);
 			// the srcpad queue might be empty now!
