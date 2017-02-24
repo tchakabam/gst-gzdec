@@ -186,6 +186,9 @@ gst_gz_dec_init (GstGzDec * filter)
   filter->enabled = TRUE;
   filter->bytes = 0;
 
+  filter->input_task_resume = FALSE;
+  filter->srcpad_task_resume = FALSE;
+
   // Queues
   filter->input_queue = g_queue_new();
   filter->output_queue = g_queue_new();
@@ -289,10 +292,10 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
   case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
     // Pausing srcpad streaming task (this will be syncroneous!)
     if (use_async_push) {
-      GST_INFO_OBJECT (filter, "Setting srcpad task to paused");
-      // this will actually 
-      gst_pad_pause_task (filter->srcpad);
+      GST_INFO_OBJECT (filter, "Setting srcpad task to paused !!!!");
+      gst_task_pause (GST_PAD_TASK(filter->srcpad));
       OUTPUT_QUEUE_LOCK(filter);
+      filter->srcpad_task_resume = TRUE;
       OUTPUT_QUEUE_SIGNAL(filter);
       OUTPUT_QUEUE_UNLOCK(filter);
     }
@@ -301,6 +304,7 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
     // Pause input processing worker
     gst_task_pause(filter->input_task);
     INPUT_QUEUE_LOCK(filter);
+    filter->input_task_resume = TRUE;
     INPUT_QUEUE_SIGNAL(filter);
     INPUT_QUEUE_UNLOCK(filter);
     break;
@@ -309,14 +313,19 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
     // (but the task are re-usable)
     if (filter->use_async_push) {
       GST_INFO_OBJECT (filter, "Setting srcpad task to paused");
-      // this will actually 
-      gst_pad_stop_task (filter->srcpad);
-      OUTPUT_QUEUE_SIGNAL(filter); 
+      gst_task_stop (GST_PAD_TASK(filter->srcpad));
+      OUTPUT_QUEUE_LOCK(filter);
+      filter->srcpad_task_resume = TRUE;
+      OUTPUT_QUEUE_SIGNAL(filter);
+      OUTPUT_QUEUE_UNLOCK(filter);
+      gst_pad_stop_task(filter->srcpad);
     }
-    gst_task_join(filter->input_task);
+    gst_task_stop(filter->input_task);
     INPUT_QUEUE_LOCK(filter);
+    filter->input_task_resume = TRUE;
     INPUT_QUEUE_SIGNAL(filter);
     INPUT_QUEUE_UNLOCK(filter);
+    gst_task_join(filter->input_task);
     break;
   }
 

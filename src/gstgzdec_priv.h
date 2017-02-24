@@ -68,8 +68,7 @@ void srcpad_task_func(gpointer user_data) {
 
 	// output queue is currently empty, check if we should send EOS
 	OUTPUT_QUEUE_LOCK(filter);
-	size = g_queue_get_length (filter->output_queue);
-	while (size == 0) {
+	while (g_queue_get_length (filter->output_queue) == 0 && !filter->srcpad_task_resume) {
 		// check if its time to EOS really
 		srcpad_check_pending_eos(filter);
 		// anyway if the queue is empty we'll just wait
@@ -77,6 +76,7 @@ void srcpad_task_func(gpointer user_data) {
 		OUTPUT_QUEUE_WAIT(filter);
 		GST_INFO_OBJECT(filter, "Resuming srcpad task func");
 	}
+	filter->srcpad_task_resume = FALSE;
 	OUTPUT_QUEUE_UNLOCK(filter);
 
 	GST_TRACE_OBJECT (filter, "Leaving srcpad task func");
@@ -137,11 +137,13 @@ void input_task_func (gpointer data) {
 
 		// Wait around empty queue condition
 		INPUT_QUEUE_LOCK(filter);
-		while(g_queue_get_length(filter->input_queue) == 0) {
+		while(g_queue_get_length(filter->input_queue) == 0 
+			&& !filter->input_task_resume) {
 			GST_INFO_OBJECT(filter, "Waiting in input task func");
 			INPUT_QUEUE_WAIT(filter);
 			GST_INFO_OBJECT(filter, "Resuming input task func");
 		}
+		filter->input_task_resume = FALSE;
 		INPUT_QUEUE_UNLOCK(filter);
 	}
 

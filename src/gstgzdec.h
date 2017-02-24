@@ -151,6 +151,9 @@ struct _GstGzDec
 
   GstEvent* pending_eos;
 
+  gboolean srcpad_task_resume;
+  gboolean input_task_resume;
+
   gboolean use_worker;
   gboolean use_async_push;
   gboolean enabled;
