@@ -129,11 +129,16 @@ void input_task_func (gpointer data) {
 		if (filter->pending_eos) {
 			GST_INFO_OBJECT(filter, "Setting EOS flag");
 			filter->eos = TRUE;
+		}
+		GST_OBJECT_UNLOCK(filter);
+
+		if (filter->eos) {
 			OUTPUT_QUEUE_LOCK(filter);
+			// the srcpad queue might be empty now!
+			filter->srcpad_task_resume = TRUE;
 			OUTPUT_QUEUE_SIGNAL(filter);
 			OUTPUT_QUEUE_UNLOCK(filter);
 		}
-		GST_OBJECT_UNLOCK(filter);
 
 		// Wait around empty queue condition
 		INPUT_QUEUE_LOCK(filter);
