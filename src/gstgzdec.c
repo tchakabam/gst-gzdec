@@ -178,23 +178,26 @@ gst_gz_dec_init (GstGzDec * filter)
   GST_PAD_SET_PROXY_CAPS (filter->srcpad);
   gst_element_add_pad (GST_ELEMENT (filter), filter->srcpad);
 
-  filter->use_worker = TRUE;
+  filter->use_worker = TRUE; // FIXME: not used!
   filter->use_async_push = TRUE;
+
+  // FIXME: these flags need a real purpose now
   filter->error = FALSE;
   filter->enabled = TRUE;
   filter->bytes = 0;
-  filter->input_buffers = NULL;
-  filter->output_buffers = NULL;
 
-  MUTEX_INIT(&filter->input_buffers_mutex);
-  MUTEX_INIT(&filter->output_buffers_mutex);
-  MUTEX_INIT(&filter->decode_worker_mutex);
+  // Queues
+  filter->input_queue = g_queue_new();
+  filter->output_queue = g_queue_new();
 
-  GST_DEBUG_OBJECT(filter, "Element address: %p", filter);
+  // Init locks
+  MUTEX_INIT(&filter->input_queue_mutex);
+  MUTEX_INIT(&filter->output_queue_mutex);
+  MUTEX_INIT(&filter->input_task_mutex);
 
-  filter->decode_worker = CREATE_TASK(decode_worker_func, filter);
-
-  gst_task_set_lock(filter->decode_worker, &filter->decode_worker_mutex);
+  // Create input task
+  filter->input_task = CREATE_TASK(input_task_func, filter);
+  gst_task_set_lock(filter->input_task, &filter->input_task_mutex);
 }
 
 static void
@@ -243,33 +246,64 @@ static GstStateChangeReturn
 gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
 {
   GstGzDec *filter = GST_GZDEC (element);
+  gboolean use_async_push = filter->use_async_push;
 
   GstState current = GST_STATE_TRANSITION_CURRENT(transition);
   GstState next = GST_STATE_TRANSITION_NEXT(transition);
 
-  GST_DEBUG_OBJECT (element, "Transition from %s to %s", 
+  GST_INFO_OBJECT (element, "Transition from %s to %s", 
     gst_element_state_get_name (current), 
     gst_element_state_get_name (next));
 
   switch(transition) {
   case GST_STATE_CHANGE_NULL_TO_READY:
-    gst_task_pause(filter->decode_worker);
+    // Initialize things
     GST_OBJECT_LOCK(filter);
     filter->eos = FALSE;
     filter->pending_eos = NULL;
     GST_OBJECT_UNLOCK(filter);
+    // Pre-warm our input processing worker
+    gst_task_pause(filter->input_task);
     break;
   case GST_STATE_CHANGE_READY_TO_PAUSED:
+    // Pre-process input data to have prerolled data
+    // on output when we go to play
+    gst_task_start(filter->input_task);
+
+    // WEIRD!!!! we need this to startup, but it should only be necessary in PLAYING state, no?
+    if (use_async_push) {
+      GST_TRACE_OBJECT (filter, "Scheduling async push (starting srcpad task)");
+      gst_pad_start_task (filter->srcpad, srcpad_task_func, filter, NULL); 
+    }
     break;
   case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
+    // We're playing, start srcpad streaming task!
+    if (use_async_push) {
+      GST_TRACE_OBJECT (filter, "Scheduling async push (starting srcpad task)");
+      gst_pad_start_task (filter->srcpad, srcpad_task_func, filter, NULL); 
+    }
     break;
   case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+    // Pausing srcpad streaming task (this will be syncroneous!)
+    if (use_async_push) {
+      GST_TRACE_OBJECT (filter, "Setting srcpad task to paused");
+      // this will actually 
+      gst_pad_pause_task (filter->srcpad);    
+    }
     break;
   case GST_STATE_CHANGE_PAUSED_TO_READY:
-    gst_task_pause(filter->decode_worker);
+    // Pause input processing worker
+    gst_task_pause(filter->input_task);
     break;
   case GST_STATE_CHANGE_READY_TO_NULL:
-    gst_task_join(filter->decode_worker);
+    // This will actually join all the task threads
+    // (but the task are re-usable)
+    if (filter->use_async_push) {
+      GST_TRACE_OBJECT (filter, "Setting srcpad task to paused");
+      // this will actually 
+      gst_pad_stop_task (filter->srcpad);    
+    }
+    gst_task_join(filter->input_task);
     break;
   }
 
@@ -293,8 +327,6 @@ gst_gz_dec_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
     //ret = gst_pad_event_default (pad, parent, event);
     GST_OBJECT_LOCK(filter);
     filter->pending_eos = event;
-    // FIXME: seems like eos and pending_eos are state-redundant
-    filter->eos = TRUE;
     GST_OBJECT_UNLOCK(filter);
     ret = TRUE;
     break;
@@ -328,17 +360,10 @@ gst_gz_dec_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   // once task is paused sooner or later
   // we should be able to take the worker lock
   GST_TRACE_OBJECT(filter, "Appending input buffer of %d bytes", (int) GST_BUFFER_SIZE(buf));
-  append_buffer(filter, buf);
+  input_queue_append_buffer(filter, buf);
   // To avoid any races between the task feeding us here
   // and the worker thread let's set the state to started
   // and then only release the lock.
-
-  GstTaskState worker_state = gst_task_get_state (filter->decode_worker); 
-  if (worker_state != GST_TASK_STARTED) {
-    GST_TRACE_OBJECT(filter, "Starting up task");
-    gst_task_start(filter->decode_worker);    
-  }
-
   GST_TRACE_OBJECT(filter, "Leaving chain function");
 
   /* just push out the incoming buffer without touching it */

@@ -7,36 +7,13 @@ struct _GstGzDecPrivate
 
 typedef struct _GstGzDecPrivate GstGzDecPrivate;
 
-guint pop_input_buffer(GstGzDec *filter, GstBuffer* buf);
-void push_output_buffers(gpointer user_data);
-void queue_new_output_buffer (GstGzDec *filter, gpointer data, gsize bytes);
+GstBuffer* input_queue_pop_buffer (GstGzDec *filter);
+void srcpad_task_func(gpointer user_data);
+void output_queue_append_data (GstGzDec *filter, gpointer data, gsize bytes);
 
-void buffer_set_data (GstBuffer* buf, gpointer data, gsize size) {
-	GstMapInfo map;
-	if (!gst_buffer_map(buf, &map, GST_MAP_WRITE)) {
-		GST_ERROR ("Error mapping buffer: %" GST_PTR_FORMAT, buf);
-		return;
-	}
+void push_one_output_buffer (GstGzDec* filter, GstBuffer* buf) {
 
-	if (size > map.size) {
-		GST_WARNING ("buffer_set_data: Mapped memory is smaller than data!");
-	}
-
-	memcpy(map.data, data, 
-		size >= map.size ? map.size : size);
-
-	gst_buffer_unmap (buf, &map);
-}
-
-void drive_worker_state(GstGzDec *filter, guint queue_size) {
-	if (queue_size == 0) {
-		gst_task_pause(filter->decode_worker);
-	}
-}
-
-void push_one_output_buffer (gpointer data, gpointer user_data) {
-	GstBuffer* buf = GST_BUFFER(data);
-	GstGzDec* filter = GST_GZDEC(user_data);
+	GST_TRACE_OBJECT (filter, "Pushing one buffer");
 
  	GstFlowReturn ret = gst_pad_push (filter->srcpad, buf);
 
@@ -44,36 +21,18 @@ void push_one_output_buffer (gpointer data, gpointer user_data) {
  		filter->error = TRUE;
  		GST_ERROR_OBJECT (filter, "Flow returned: %s", gst_flow_get_name (ret));
  	}
-
- 	OUTPUT_QUEUE_LOCK(filter);
- 	filter->output_buffers = g_list_remove (filter->output_buffers, buf);
- 	OUTPUT_QUEUE_UNLOCK(filter);
 }
 
-void push_output_buffers(gpointer user_data) {
-	guint in_size, out_size;
-	GstGzDec* filter = GST_GZDEC(user_data);
-
-	OUTPUT_QUEUE_LOCK(filter);
-	out_size = g_list_length(filter->output_buffers);
-	if (out_size == 0) {
-		GST_INFO_OBJECT (filter, "No output buffers to push");
-	} else {
-		GST_INFO_OBJECT (filter, "Now pushing whole output queue (%d buffers)", (int) out_size);
-		g_list_foreach(filter->output_buffers, push_one_output_buffer, filter);		
-	}
-	OUTPUT_QUEUE_UNLOCK(filter);
-
-	INPUT_QUEUE_LOCK(filter);
-	in_size = g_list_length(filter->input_buffers);
-	INPUT_QUEUE_UNLOCK(filter);
-
+void srcpad_check_pending_eos (GstGzDec* filter) {
 	GstEvent *event = NULL;
+	gboolean use_async_push;
+
 	GST_OBJECT_LOCK(filter);
+	use_async_push = filter->use_async_push;
 	// We received an EOS event AND have processed everything
 	// on the input queue (after EOS received in sync with data-flow, no more data can arrive in input queue).
 	// Now we can dispatch the pending EOS event!
-	if (filter->eos && in_size == 0) {
+	if (filter->eos) {
 		GST_INFO_OBJECT (filter, "Dispatching pending EOS!");
 		event = filter->pending_eos;
 	}
@@ -84,14 +43,40 @@ void push_output_buffers(gpointer user_data) {
 		if (!gst_pad_event_default (filter->sinkpad, GST_OBJECT(filter), event)) {
 			GST_WARNING_OBJECT(filter, "Failed to propagate pending EOS event: %" GST_PTR_FORMAT, event);
 		}
+
+		if (use_async_push) {
+			gst_pad_pause_task (filter->srcpad);
+		}
+		
+	}
+}
+
+void srcpad_task_func(gpointer user_data) {
+	GstGzDec* filter = GST_GZDEC(user_data);
+
+	GST_TRACE_OBJECT (filter, "Entering srcpad task func");
+
+	guint size;
+	gpointer data;
+
+	OUTPUT_QUEUE_LOCK(filter);
+	size = g_queue_get_length (filter->output_queue);
+	data = g_queue_pop_head (filter->output_queue);
+	OUTPUT_QUEUE_UNLOCK(filter);
+
+	GST_INFO_OBJECT (filter, "Output queue length before pop: %d", (int) size);
+
+	if (data) {
+		push_one_output_buffer (filter, GST_BUFFER(data));
 	}
 
-	if (filter->use_async_push) {
-		GST_TRACE_OBJECT (filter, "Setting srcpad task to paused");
-		gst_pad_pause_task (filter->srcpad);		
+	// output queue is currently empty, check if we should send EOS
+	if ((data && (size - 1 == 0)) || !data) {
+		//GST_DEBUG_OBJECT (filter, "Data: %p, Size: %d", data, (int) size);
+		srcpad_check_pending_eos(filter);
 	}
 
-	GST_TRACE_OBJECT (filter, "Done pushing output buffers");
+	GST_TRACE_OBJECT (filter, "Leaving srcpad task func");
 }
 
 void do_work_on_buffer_unlocked(GstGzDec* filter, GstBuffer* buf) {
@@ -99,25 +84,19 @@ void do_work_on_buffer_unlocked(GstGzDec* filter, GstBuffer* buf) {
 	// TESTING
 	char foo = 'c';
 
-	queue_new_output_buffer (filter, &foo, 1);
+	output_queue_append_data (filter, &foo, 1);
 }
 
-void process_one_input_buffer (gpointer data, gpointer user_data) {
-
-	GstBuffer* buf = GST_BUFFER(data);
-	GstGzDec* filter = GST_GZDEC(user_data);
+void process_one_input_buffer (GstGzDec* filter, GstBuffer* buf) {
 
 	GST_TRACE_OBJECT (filter, "Processing one input buffer: %" GST_PTR_FORMAT, buf);
+
+	// FIXME: why again?
+	/*
 	if (G_UNLIKELY(filter->error)) {
 		return;
 	}
-
-	drive_worker_state(
-		filter,
-		pop_input_buffer(filter, buf)
-	);
-
-	INPUT_QUEUE_UNLOCK(filter);
+	*/
 
 	// DO ACTUAL PROCESSING HERE!!
 
@@ -125,67 +104,62 @@ void process_one_input_buffer (gpointer data, gpointer user_data) {
 
 	//////////////////////////////
 	//////////////////////////////
-
-	INPUT_QUEUE_LOCK(filter);
 }
 
-void decode_worker_func (gpointer data) {
+void input_task_func (gpointer data) {
 
  	GstGzDec *filter = GST_GZDEC (data);
- 	guint size;
- 	gboolean use_async_push = filter->use_async_push;
+ 	GstBuffer* buf;
 
-	GST_TRACE_OBJECT(filter, "Entering worker function");
+	GST_TRACE_OBJECT(filter, "Entering input task function");
 
 	GST_DEBUG_OBJECT(filter, "Waiting for queue access ...");
+
 	INPUT_QUEUE_LOCK(filter);
-	size = g_list_length (filter->input_buffers);
-	drive_worker_state(filter, size);
-	GST_DEBUG_OBJECT(filter, "Input queue length before run: %d", (int) size);
-	g_list_foreach(filter->input_buffers, process_one_input_buffer, filter);
+	buf = input_queue_pop_buffer (filter);
  	INPUT_QUEUE_UNLOCK(filter);
 
-	if (use_async_push) {
- 		GST_TRACE_OBJECT (filter, "Scheduling async push (starting srcpad task)");
- 		gst_pad_start_task (filter->srcpad, push_output_buffers, filter, NULL);	
+ 	if (buf != NULL) {
+		process_one_input_buffer(filter, buf);	
+	} else {
+		// OPTIMIZABLE: this will run one iteration later than it could
+		GST_OBJECT_LOCK(filter);
+		// There is an EOS event pending and the input queue is fully processed
+		// We are at EOS.
+		if (filter->pending_eos) {
+			filter->eos = TRUE;
+			gst_task_pause(filter->input_task);
+		}
+		GST_OBJECT_UNLOCK(filter);
 	}
 
- 	if (!filter->use_async_push) {
-	 	// NOTE: with this we are running the push on our worker task;
-	 	//       however in principle this is a streaming task job
-	 	//       that should be run on the respective task's streaming thread directly.
-	 	//       Doing it like this makes this worker thread the de-facto down-streaming-thread!
-	 	//       Async push allows to further decouple the heavy-duty from the downstreaming-thread
-	 	//       to avoid our processing being blocked by downstream components.
-		push_output_buffers(filter);	
- 	}
-
-	GST_TRACE_OBJECT(filter, "Leaving worker function");
+	GST_TRACE_OBJECT(filter, "Leaving input task function");
 }
 
-guint pop_input_buffer(GstGzDec *filter, GstBuffer* buf) {
+GstBuffer* input_queue_pop_buffer (GstGzDec *filter) {
+	gpointer data;
 	guint size;
 
 	INPUT_QUEUE_LOCK(filter);
 	GST_DEBUG_OBJECT(filter, "Pop-ing buffer");
-	filter->input_buffers = g_list_remove (filter->input_buffers, buf);
-	size = g_list_length (filter->input_buffers);
+	size = g_queue_get_length (filter->input_queue);
+	data = g_queue_pop_head (filter->input_queue);
 	INPUT_QUEUE_UNLOCK(filter);
 
-	GST_DEBUG_OBJECT(filter, "Input queue length after pop: %d", (int) size);
+	GST_DEBUG_OBJECT(filter, "Input queue length before pop: %d", (int) size);
 
-	return size;
+	return GST_BUFFER(data);
 }
 
-void append_buffer (GstGzDec *filter, GstBuffer* buf) {
+void input_queue_append_buffer (GstGzDec *filter, GstBuffer* buf) {
 	INPUT_QUEUE_LOCK(filter);
 	GST_DEBUG_OBJECT (filter, "Appending data to input buffer");
-	filter->input_buffers = g_list_append (filter->input_buffers, gst_buffer_ref(buf));
-	GST_DEBUG_OBJECT(filter, "Input queue length after append: %d", (int) g_list_length (filter->input_buffers));
+	g_queue_push_tail (filter->input_queue, gst_buffer_ref(buf));
+	GST_DEBUG_OBJECT(filter, "Input queue length after append: %d", (int) g_queue_get_length (filter->input_queue));
 	INPUT_QUEUE_UNLOCK(filter);
 }
 
-void queue_new_output_buffer (GstGzDec *filter, gpointer data, gsize bytes) {
+void output_queue_append_data (GstGzDec *filter, gpointer data, gsize bytes) {
 
 	GstBuffer* buf = BUFFER_ALLOC(bytes);
 	BUFFER_SET_DATA(buf, data, bytes);
@@ -193,7 +167,7 @@ void queue_new_output_buffer (GstGzDec *filter, gpointer data, gsize bytes) {
 	GST_LOG_OBJECT (filter, "Queueing new output buffer: %" GST_PTR_FORMAT, buf);
 
 	OUTPUT_QUEUE_LOCK(filter);
-	filter->output_buffers = g_list_append (filter->output_buffers, buf);
+	g_queue_push_tail (filter->output_queue, buf);
 	OUTPUT_QUEUE_UNLOCK(filter);
 }
 
