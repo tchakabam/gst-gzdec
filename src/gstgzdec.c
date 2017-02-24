@@ -73,6 +73,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_gz_dec_debug);
 #define GST_CAT_DEFAULT gst_gz_dec_debug
 
+#include "gstgzdec_zipstream.h"
 #include "gstgzdec_priv.h"
 
 /* Filter signals and args */
@@ -158,6 +159,12 @@ gst_gz_dec_class_init (GstGzDecClass * klass)
   gstelement_class->change_state = gst_gz_dec_change_state;
 }
 
+// Just an adapter function resulting from the abstraction
+static void
+gst_gz_stream_writer_func (gpointer user_data, gpointer data, gsize bytes) {
+  output_queue_append_data (user_data, data, bytes);
+}
+
 /* initialize the new element
  * instantiate pads and add them to element
  * set pad calback functions
@@ -204,6 +211,8 @@ gst_gz_dec_init (GstGzDec * filter)
   // Create input task
   filter->input_task = CREATE_TASK(input_task_func, filter);
   gst_task_set_lock(filter->input_task, &filter->input_task_mutex);
+
+  filter->decoder = zipdec_stream_new(filter, gst_gz_stream_writer_func);
 }
 
 static void
