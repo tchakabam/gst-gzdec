@@ -341,6 +341,10 @@ gst_gz_dec_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
     GST_OBJECT_LOCK(filter);
     filter->pending_eos = event;
     GST_OBJECT_UNLOCK(filter);
+    // the queue might be waiting at this point
+    INPUT_QUEUE_LOCK(filter);
+    INPUT_QUEUE_SIGNAL(filter);
+    INPUT_QUEUE_UNLOCK(filter);
     ret = TRUE;
     break;
   case GST_EVENT_CAPS:

@@ -27,6 +27,7 @@ void srcpad_check_pending_eos (GstGzDec* filter) {
 	GstEvent *event = NULL;
 
 	GST_OBJECT_LOCK(filter);
+	GST_INFO_OBJECT (filter, "Checking if EOS conds met");
 	// We received an EOS event AND have processed everything
 	// on the input queue (after EOS received in sync with data-flow, no more data can arrive in input queue).
 	// Now we can dispatch the pending EOS event!
@@ -126,7 +127,11 @@ void input_task_func (gpointer data) {
 		// There is an EOS event pending and the input queue is fully processed
 		// We are at EOS.
 		if (filter->pending_eos) {
+			GST_INFO_OBJECT(filter, "Setting EOS flag");
 			filter->eos = TRUE;
+			OUTPUT_QUEUE_LOCK(filter);
+			OUTPUT_QUEUE_SIGNAL(filter);
+			OUTPUT_QUEUE_UNLOCK(filter);
 		}
 		GST_OBJECT_UNLOCK(filter);
 
@@ -138,7 +143,6 @@ void input_task_func (gpointer data) {
 			GST_INFO_OBJECT(filter, "Resuming input task func");
 		}
 		INPUT_QUEUE_UNLOCK(filter);
-		
 	}
 
 	GST_TRACE_OBJECT(filter, "Leaving input task function");
