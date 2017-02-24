@@ -34,6 +34,10 @@ void input_task_start(GstGzDec* filter) {
 void input_task_pause(GstGzDec* filter) {
     gst_task_pause(filter->input_task);
     input_queue_signal_resume (filter);
+    // aquire input stream lock to make this
+    // blocks until we are actually paused
+    REC_MUTEX_LOCK(GST_TASK_GET_LOCK(filter->input_task));
+    REC_MUTEX_UNLOCK(GST_TASK_GET_LOCK(filter->input_task));
 }
 
 void input_task_join(GstGzDec* filter) {
@@ -44,7 +48,7 @@ void input_task_join(GstGzDec* filter) {
 
 void srcpad_task_start(GstGzDec* filter) {
     if (filter->use_async_push) {
-      GST_INFO_OBJECT (filter, "Scheduling async push (starting srcpad task)");
+      GST_INFO_OBJECT (filter, "Starting srcpad task");
       gst_pad_start_task (filter->srcpad, srcpad_task_func, filter, NULL); 
     }
 }
@@ -54,6 +58,10 @@ void srcpad_task_pause(GstGzDec* filter) {
       GST_INFO_OBJECT (filter, "Setting srcpad task to paused");
       gst_task_pause (GST_PAD_TASK(filter->srcpad));
       output_queue_signal_resume (filter);
+      // this will just make sure we block until 
+      // the task is actually done as this
+      // function acquires the stream lock
+      gst_pad_pause_task(filter->srcpad);
     }
 }
 
@@ -67,6 +75,7 @@ void srcpad_task_join(GstGzDec* filter) {
       gst_task_stop (GST_PAD_TASK(filter->srcpad));
       output_queue_signal_resume (filter);
       // properly shutdown the pad task here now
+      // this will join the thread
       gst_pad_stop_task(filter->srcpad);
     }
 }

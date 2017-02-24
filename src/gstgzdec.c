@@ -285,7 +285,7 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
     srcpad_task_pause(filter);
     break;
   case GST_STATE_CHANGE_PAUSED_TO_READY:
-    // We might have never reach playing state, in this
+    // We might have never reached playing state, in this
     // case we want to pause the srcpad task from here!
     // Pausing srcpad streaming task (this will be syncroneous!)
     srcpad_task_pause(filter);
