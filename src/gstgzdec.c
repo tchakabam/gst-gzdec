@@ -252,7 +252,6 @@ static GstStateChangeReturn
 gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
 {
   GstGzDec *filter = GST_GZDEC (element);
-  gboolean use_async_push = filter->use_async_push;
 
   GstState current = GST_STATE_TRANSITION_CURRENT(transition);
   GstState next = GST_STATE_TRANSITION_NEXT(transition);
@@ -274,63 +273,30 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
   case GST_STATE_CHANGE_READY_TO_PAUSED:
     // Pre-process input data to have prerolled data
     // on output when we go to play
-    gst_task_start(filter->input_task);
-
-    // WEIRD!!!! we need this to startup, but it should only be necessary in PLAYING state, no?
-    if (use_async_push) {
-      GST_INFO_OBJECT (filter, "Scheduling async push (starting srcpad task)");
-      gst_pad_start_task (filter->srcpad, srcpad_task_func, filter, NULL); 
-    }
+    input_task_start(filter);
+    // Weird! we need this to startup, but it should only be necessary in PLAYING state, no?
+    srcpad_task_start(filter);
     break;
   case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
     // We're playing, start srcpad streaming task!
-    if (use_async_push) {
-      GST_INFO_OBJECT (filter, "Scheduling async push (starting srcpad task)");
-      gst_pad_start_task (filter->srcpad, srcpad_task_func, filter, NULL); 
-    }
+    srcpad_task_start(filter);
     break;
   case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
-    // Pausing srcpad streaming task (this will be syncroneous!)
-    if (use_async_push) {
-      GST_INFO_OBJECT (filter, "Setting srcpad task to paused !!!!");
-      gst_task_pause (GST_PAD_TASK(filter->srcpad));
-      OUTPUT_QUEUE_LOCK(filter);
-      filter->srcpad_task_resume = TRUE;
-      OUTPUT_QUEUE_SIGNAL(filter);
-      OUTPUT_QUEUE_UNLOCK(filter);
-    }
+    srcpad_task_pause(filter);
     break;
   case GST_STATE_CHANGE_PAUSED_TO_READY:
+    // We might have never reach playing state, in this
+    // case we want to pause the srcpad task from here!
+    // Pausing srcpad streaming task (this will be syncroneous!)
+    srcpad_task_pause(filter);
     // Pause input processing worker
-    gst_task_pause(filter->input_task);
-    INPUT_QUEUE_LOCK(filter);
-    filter->input_task_resume = TRUE;
-    INPUT_QUEUE_SIGNAL(filter);
-    INPUT_QUEUE_UNLOCK(filter);
+    input_task_pause(filter);
     break;
   case GST_STATE_CHANGE_READY_TO_NULL:
     // This will actually join all the task threads
     // (but the tasks are re-usable)
-    if (filter->use_async_push) {
-      GST_INFO_OBJECT (filter, "Setting srcpad task to paused");
-      // this looks hackish but we can't use 
-      // the actual pad function as it will
-      // need to acquire the task lock which
-      // will only be released after we signaled the task
-      gst_task_stop (GST_PAD_TASK(filter->srcpad));
-      OUTPUT_QUEUE_LOCK(filter);
-      filter->srcpad_task_resume = TRUE;
-      OUTPUT_QUEUE_SIGNAL(filter);
-      OUTPUT_QUEUE_UNLOCK(filter);
-      // properly shutdown the pad task here now
-      gst_pad_stop_task(filter->srcpad);
-    }
-    gst_task_stop(filter->input_task);
-    INPUT_QUEUE_LOCK(filter);
-    filter->input_task_resume = TRUE;
-    INPUT_QUEUE_SIGNAL(filter);
-    INPUT_QUEUE_UNLOCK(filter);
-    gst_task_join(filter->input_task);
+    srcpad_task_join(filter);
+    input_task_join(filter);
     break;
   }
 
@@ -351,16 +317,13 @@ gst_gz_dec_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 
   switch (GST_EVENT_TYPE (event)) {
   case GST_EVENT_EOS:
-    //ret = gst_pad_event_default (pad, parent, event);
     GST_OBJECT_LOCK(filter);
     filter->pending_eos = event;
     GST_OBJECT_UNLOCK(filter);
     // the queue might be waiting at this point
-    INPUT_QUEUE_LOCK(filter);
-    // the queue might be empty
-    filter->input_task_resume = TRUE;
-    INPUT_QUEUE_SIGNAL(filter);
-    INPUT_QUEUE_UNLOCK(filter);
+
+    input_queue_signal_resume (filter);
+
     ret = TRUE;
     break;
   case GST_EVENT_CAPS:

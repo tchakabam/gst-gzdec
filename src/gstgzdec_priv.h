@@ -11,6 +11,67 @@ GstBuffer* input_queue_pop_buffer (GstGzDec *filter);
 void srcpad_task_func(gpointer user_data);
 void output_queue_append_data (GstGzDec *filter, gpointer data, gsize bytes);
 
+void input_queue_signal_resume (GstGzDec* filter) {
+    INPUT_QUEUE_LOCK(filter);
+    // the queue might be empty
+    filter->input_task_resume = TRUE;
+    INPUT_QUEUE_SIGNAL(filter);
+    INPUT_QUEUE_UNLOCK(filter);
+}
+
+void output_queue_signal_resume (GstGzDec* filter) {
+    OUTPUT_QUEUE_LOCK(filter);
+    // the queue might be empty
+    filter->srcpad_task_resume = TRUE;
+    OUTPUT_QUEUE_SIGNAL(filter);
+    OUTPUT_QUEUE_UNLOCK(filter);
+}
+
+void input_task_start(GstGzDec* filter) {
+	gst_task_start(filter->input_task);
+}
+
+void input_task_pause(GstGzDec* filter) {
+    gst_task_pause(filter->input_task);
+    input_queue_signal_resume (filter);
+}
+
+void input_task_join(GstGzDec* filter) {
+    gst_task_stop(filter->input_task);
+    input_queue_signal_resume (filter);
+    gst_task_join(filter->input_task);
+}
+
+void srcpad_task_start(GstGzDec* filter) {
+    if (filter->use_async_push) {
+      GST_INFO_OBJECT (filter, "Scheduling async push (starting srcpad task)");
+      gst_pad_start_task (filter->srcpad, srcpad_task_func, filter, NULL); 
+    }
+}
+
+void srcpad_task_pause(GstGzDec* filter) {
+    if (filter->use_async_push) {
+      GST_INFO_OBJECT (filter, "Setting srcpad task to paused");
+      gst_task_pause (GST_PAD_TASK(filter->srcpad));
+      output_queue_signal_resume (filter);
+    }
+}
+
+void srcpad_task_join(GstGzDec* filter) {
+    if (filter->use_async_push) {
+      GST_INFO_OBJECT (filter, "Setting srcpad task to stopped");
+      // this looks hackish but we can't use 
+      // the actual pad function as it will
+      // need to acquire the task lock which
+      // will only be released after we signaled the task
+      gst_task_stop (GST_PAD_TASK(filter->srcpad));
+      output_queue_signal_resume (filter);
+      // properly shutdown the pad task here now
+      gst_pad_stop_task(filter->srcpad);
+    }
+}
+
+
 void push_one_output_buffer (GstGzDec* filter, GstBuffer* buf) {
 
 	GST_TRACE_OBJECT (filter, "Pushing one buffer");
