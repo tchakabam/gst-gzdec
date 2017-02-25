@@ -73,7 +73,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_gz_dec_debug);
 #define GST_CAT_DEFAULT gst_gz_dec_debug
 
-#include "gstgzdec_zipstream.h"
+#include "gstgzdec_zipdecstream.h"
 #include "gstgzdec_priv.h"
 
 /* Filter signals and args */
@@ -367,7 +367,7 @@ gst_gz_dec_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
   // once task is paused sooner or later
   // we should be able to take the worker lock
-  GST_TRACE_OBJECT(filter, "Appending input buffer of %d bytes", (int) GST_BUFFER_SIZE(buf));
+  GST_TRACE_OBJECT(filter, "Appending input buffer of %d bytes", (int) BUFFER_SIZE(buf));
   input_queue_append_buffer(filter, buf);
   // To avoid any races between the task feeding us here
   // and the worker thread let's set the state to started
