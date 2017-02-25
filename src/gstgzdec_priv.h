@@ -8,7 +8,7 @@ void output_queue_append_data (GstGzDec *filter, gpointer data, gsize bytes);
 
 // FIXME: make private funcs all static
 
-ZipDecoderStreamCtx* get_decoder(GstGzDec * filter) {
+ZipDecoderStream* get_decoder(GstGzDec * filter) {
   return ZIP_DECODER_STREAM(filter->decoder);
 }
 
@@ -101,9 +101,11 @@ void srcpad_check_pending_eos (GstGzDec* filter) {
 	// We received an EOS event AND have processed everything
 	// on the input queue (after EOS received in sync with data-flow, no more data can arrive in input queue).
 	// Now we can dispatch the pending EOS event!
-	if (filter->eos) {
+	if (filter->eos && filter->pending_eos) {
 		GST_INFO_OBJECT (filter, "Dispatching pending EOS!");
 		event = filter->pending_eos;
+		// make sure we don't dispatch it twice
+		filter->pending_eos = NULL;
 	}
 	GST_OBJECT_UNLOCK(filter);
 
@@ -112,8 +114,6 @@ void srcpad_check_pending_eos (GstGzDec* filter) {
 		if (!gst_pad_event_default (filter->sinkpad, GST_OBJECT(filter), event)) {
 			GST_WARNING_OBJECT(filter, "Failed to propagate pending EOS event: %" GST_PTR_FORMAT, event);
 		}
-
-		gst_pad_pause_task (filter->srcpad);
 	}
 }
 
@@ -139,7 +139,8 @@ void srcpad_task_func(gpointer user_data) {
 	// output queue is currently empty, check if we should send EOS
 	OUTPUT_QUEUE_LOCK(filter);
 	while (g_queue_get_length (filter->output_queue) == 0 && !filter->srcpad_task_resume) {
-		// check if its time to EOS really
+		// check if its time to EOS really, if yes this function will dispatch the EOS
+		// to the srcpad
 		srcpad_check_pending_eos(filter);
 		// anyway if the queue is empty we'll just wait
 		GST_INFO_OBJECT (filter, "Waiting in srcpad task func");

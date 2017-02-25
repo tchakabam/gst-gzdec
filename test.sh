@@ -15,6 +15,9 @@ gst-inspect-1.0 | grep gzdec
 
 echo "\nLaunching pipeline:"
 
-gst-launch-1.0 filesrc location=test.png ! gzdec ! filesink location=output.txt
+# gst-launch-1.0 filesrc location=test/test.txt.zip ! gzdec ! filesink location=test/test.out.txt
+
+gst-launch-1.0 filesrc location=test/test.png.zip ! gzdec ! filesink location=test/test.out.png
 
 echo "\n"
+

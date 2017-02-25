@@ -185,6 +185,8 @@ gst_gz_dec_init (GstGzDec * filter)
   GST_PAD_SET_PROXY_CAPS (filter->srcpad);
   gst_element_add_pad (GST_ELEMENT (filter), filter->srcpad);
 
+  filter->pending_eos = NULL;
+
   filter->use_worker = TRUE; // FIXME: not used!
   filter->use_async_push = TRUE;
 
@@ -274,7 +276,6 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
     // Initialize things
     GST_OBJECT_LOCK(filter);
     filter->eos = FALSE;
-    filter->pending_eos = NULL;
     GST_OBJECT_UNLOCK(filter);
     // Pre-warm our input processing worker
     gst_task_pause(filter->input_task);
