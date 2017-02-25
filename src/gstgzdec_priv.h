@@ -70,37 +70,31 @@ void input_task_join(GstGzDec* filter) {
 }
 
 void srcpad_task_start(GstGzDec* filter) {
-    if (filter->use_async_push) {
-      GST_INFO_OBJECT (filter, "Starting srcpad task");
-      gst_pad_start_task (filter->srcpad, srcpad_task_func, filter, NULL); 
-    }
+  GST_INFO_OBJECT (filter, "Starting srcpad task");
+  gst_pad_start_task (filter->srcpad, srcpad_task_func, filter, NULL); 
 }
 
 void srcpad_task_pause(GstGzDec* filter) {
-    if (filter->use_async_push) {
-      GST_INFO_OBJECT (filter, "Setting srcpad task to paused");
-      gst_task_pause (GST_PAD_TASK(filter->srcpad));
-      output_queue_signal_resume (filter);
-      // this will just make sure we block until 
-      // the task is actually done as this
-      // function acquires the stream lock
-      gst_pad_pause_task(filter->srcpad);
-    }
+  GST_INFO_OBJECT (filter, "Setting srcpad task to paused");
+  gst_task_pause (GST_PAD_TASK(filter->srcpad));
+  output_queue_signal_resume (filter);
+  // this will just make sure we block until 
+  // the task is actually done as this
+  // function acquires the stream lock
+  gst_pad_pause_task(filter->srcpad);
 }
 
 void srcpad_task_join(GstGzDec* filter) {
-    if (filter->use_async_push) {
-      GST_INFO_OBJECT (filter, "Setting srcpad task to stopped");
-      // this looks hackish but we can't use 
-      // the actual pad function as it will
-      // need to acquire the task lock which
-      // will only be released after we signaled the task
-      gst_task_stop (GST_PAD_TASK(filter->srcpad));
-      output_queue_signal_resume (filter);
-      // properly shutdown the pad task here now
-      // this will join the thread
-      gst_pad_stop_task(filter->srcpad);
-    }
+  GST_INFO_OBJECT (filter, "Setting srcpad task to stopped");
+  // this looks hackish but we can't use 
+  // the actual pad function as it will
+  // need to acquire the task lock which
+  // will only be released after we signaled the task
+  gst_task_stop (GST_PAD_TASK(filter->srcpad));
+  output_queue_signal_resume (filter);
+  // properly shutdown the pad task here now
+  // this will join the thread
+  gst_pad_stop_task(filter->srcpad);
 }
 
 void push_one_output_buffer (GstGzDec* filter, GstBuffer* buf) {
@@ -110,7 +104,6 @@ void push_one_output_buffer (GstGzDec* filter, GstBuffer* buf) {
  	GstFlowReturn ret = gst_pad_push (filter->srcpad, buf);
 
  	if (ret != GST_FLOW_OK) {
- 		filter->error = TRUE;
  		GST_ERROR_OBJECT (filter, "Flow returned: %s", gst_flow_get_name (ret));
  	}
 }

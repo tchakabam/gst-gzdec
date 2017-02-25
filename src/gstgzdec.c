@@ -46,18 +46,17 @@
 /**
  * SECTION:element-gzdec
  *
- * FIXME:Describe gzdec here.
+ * Generic decoder element that will unzip things by default. 
  *
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch -v -m fakesrc ! gzdec ! fakesink silent=TRUE
+ * gst-launch-1.0 filesrc location=test/test.txt.zip ! gzdec ! filesink location=test/test.out.txt
  * ]|
  * </refsect2>
  */
 
 #include <string.h>
-//#include <stdio.h>
 #include <stdlib.h>
 
 #include <zlib.h>
@@ -85,10 +84,7 @@ enum
 
 enum
 {
-  PROP_0,
-  PROP_ENABLED,
-  PROP_BYTES,
-  PROP_USE_WORKER
+  PROP_0
 };
 
 /* the capabilities of the inputs and outputs.
@@ -133,18 +129,6 @@ gst_gz_dec_class_init (GstGzDecClass * klass)
   gobject_class->set_property = gst_gz_dec_set_property;
   gobject_class->get_property = gst_gz_dec_get_property;
 
-  g_object_class_install_property (gobject_class, PROP_BYTES,
-      g_param_spec_uint ("bytes", "Bytes", "Count of processed bytes",
-          0, G_MAXUINT,0, G_PARAM_READABLE));
-
-  g_object_class_install_property (gobject_class, PROP_ENABLED,
-      g_param_spec_boolean ("enabled", "Enabled", "Enable decoding",
-          TRUE, G_PARAM_READWRITE));
-
-  g_object_class_install_property (gobject_class, PROP_ENABLED,
-      g_param_spec_boolean ("use-worker", "Use worker", "Use worker for decoding",
-          TRUE, G_PARAM_READWRITE));
-
   gst_element_class_set_details_simple(gstelement_class,
     "Gzip decoder",
     "FIXME:Generic",
@@ -187,14 +171,6 @@ gst_gz_dec_init (GstGzDec * filter)
 
   filter->pending_eos = NULL;
 
-  filter->use_worker = TRUE; // FIXME: not used!
-  filter->use_async_push = TRUE;
-
-  // FIXME: these flags need a real purpose now
-  filter->error = FALSE;
-  filter->enabled = TRUE;
-  filter->bytes = 0;
-
   filter->input_task_resume = FALSE;
   filter->srcpad_task_resume = FALSE;
 
@@ -221,16 +197,7 @@ static void
 gst_gz_dec_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstGzDec *filter = GST_GZDEC (object);
-
   switch (prop_id) {
-
-    case PROP_USE_WORKER:
-      filter->use_worker = g_value_get_boolean (value);
-      break;
-    case PROP_ENABLED:
-      filter->enabled = g_value_get_boolean (value);
-      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -241,18 +208,7 @@ static void
 gst_gz_dec_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstGzDec *filter = GST_GZDEC (object);
-
   switch (prop_id) {
-    case PROP_USE_WORKER:
-      g_value_set_boolean (value, filter->use_worker);
-      break;
-    case PROP_ENABLED:
-      g_value_set_boolean (value, filter->enabled);
-      break;
-    case PROP_BYTES:
-      g_value_set_uint (value, filter->bytes);
-      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;

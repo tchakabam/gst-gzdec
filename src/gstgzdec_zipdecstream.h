@@ -3,6 +3,12 @@
 #define ZIP_DEC_STREAM_OUT_BUFFER_SIZE 16*1024
 #define ZIP_DECODER_STREAM(ptr) ((ZipDecoderStream*)ptr) 
 
+#define ZLIB_INFLATE_WINDOW_BITS 32 // This value enables gzip as well as zlib formats
+									// by automatic header detection.
+									// Force to Gzip only with 16
+									// TODO: one could make this a run-time param
+									// of the wrapper constructor.
+
 typedef struct _ZipDecoderStream ZipDecoderStream;
 typedef void (*StreamWriterFunc) (gpointer user_data, gpointer data, gsize bytes);
 typedef z_stream ZStream;
@@ -22,7 +28,7 @@ ZipDecoderStream* zipdec_stream_new(gpointer user_data, StreamWriterFunc writer_
     wrapper->stream.opaque = Z_NULL;
     wrapper->stream.avail_in = 0;
     wrapper->stream.next_in = Z_NULL;
-	int ret = inflateInit(&wrapper->stream);
+	int ret = inflateInit2(&wrapper->stream, ZLIB_INFLATE_WINDOW_BITS);
     if (ret != Z_OK) {
     	GST_ERROR("Got code %d when calling zlib inflateInit", (int) ret);
     }
@@ -45,11 +51,11 @@ gboolean zipdec_stream_digest_buffer(ZipDecoderStream *wrapper, GstBuffer* buf) 
 
 	// processing state
     int ret;
+    guint have;
     gboolean success = FALSE;
-    unsigned have;
 
     // deflate output buffer
-    unsigned char out[ZIP_DEC_STREAM_OUT_BUFFER_SIZE];
+    guchar out[ZIP_DEC_STREAM_OUT_BUFFER_SIZE];
     guint out_size = sizeof(out);
 
     // input buffer
@@ -71,8 +77,8 @@ gboolean zipdec_stream_digest_buffer(ZipDecoderStream *wrapper, GstBuffer* buf) 
 
 #if 0
 	// debug: prints hex dump of input buffer
-	unsigned char* buffer_chars = buffer_data;
-	for (int i = 0; i < buffer_size; i++)
+	guchar* buffer_chars = buffer_data;
+	for (gint i = 0; i < buffer_size; i++)
 	{
 	    if (i > 0) g_print(":");
 	    g_print("%02X", buffer_chars[i]);
