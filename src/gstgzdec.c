@@ -192,7 +192,11 @@ gst_gz_dec_init (GstGzDec * filter)
   filter->input_task = CREATE_TASK(input_task_func, filter);
   gst_task_set_lock(filter->input_task, &filter->input_task_mutex);
 
+  GST_INFO_OBJECT(filter, "Creating decoder stream wrapper instance");
+
   filter->decoder = CREATE_DECODER(filter, gst_gz_stream_writer_func);
+
+  GST_INFO_OBJECT(filter, "Done initializing element");
 }
 
 static void

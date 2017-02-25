@@ -18,13 +18,18 @@
 #define OUTPUT_QUEUE_UNLOCK(element) g_mutex_unlock(&element->output_queue_mutex)
 
 // decoder adapters
+
+// Gzip
 #define CREATE_ZIP_DECODER(element, writer_func) zipdec_stream_new(element, writer_func)
 #define ZIP_DECODER_DECODE(decoder, buffer) zipdec_stream_digest_buffer(decoder, buffer)
+// Bzip
+#define CREATE_BZIP_DECODER(element, writer_func) bzipdec_stream_new(element, writer_func)
+#define BZIP_DECODER_DECODE(decoder, buffer) bzipdec_stream_digest_buffer(decoder, buffer)
 
 // setup which implementation to use
-#define CREATE_DECODER CREATE_ZIP_DECODER
-#define GET_DECODER(element) ZIP_DECODER_STREAM(element->decoder)
-#define DECODE_BUFFER ZIP_DECODER_DECODE
+#define CREATE_DECODER CREATE_BZIP_DECODER
+#define GET_DECODER(element) BZIP_DECODER_STREAM(element->decoder)
+#define DECODE_BUFFER BZIP_DECODER_DECODE
 
 typedef struct _GstGzDecPrivate GstGzDecPrivate;
 

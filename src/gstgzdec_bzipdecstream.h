@@ -15,9 +15,16 @@ struct _BzipDecoderStream {
 
 BzipDecoderStream* bzipdec_stream_new(gpointer user_data, StreamWriterFunc writer_func) {
 	BzipDecoderStream* wrapper = BZIP_DECODER_STREAM(g_malloc(sizeof(BzipDecoderStream)));
+	// NOTE: 
+	// If we dont do this memset BZ2_bzDecompressInit crashes 1 out of 5 times consistent 
+	// with a SEGV sig because it expects to initialize a completely 0'd piece of memory, 
+	// as otherwise things fall apart in there apparently.
+	memset(wrapper, 0, sizeof(BzipDecoderStream)); // Important
 	wrapper->user_data = user_data;
 	wrapper->writer_func = writer_func;
+	GST_INFO("+BZ2_bzDecompressInit");
 	int ret = BZ2_bzDecompressInit(&wrapper->stream, 0, 0);
+	GST_INFO("-BZ2_bzDecompressInit");
     if (ret != BZ_OK) {
     	GST_ERROR("Got code %d when calling BZ2_bzDecompressInit", (int) ret);
     }
@@ -95,9 +102,10 @@ gboolean bzipdec_stream_digest_buffer(BzipDecoderStream *wrapper, GstBuffer* buf
 	    // therefore we need to iterate eventually several times 
 	    // over this function
 	    GST_INFO ("Running decompress func now");
-	    if ((ret = BZ2_bzDecompress(strm)) != BZ_OK) {
+	    ret = BZ2_bzDecompress(strm);
+	    if (!(ret == BZ_OK || ret == BZ_STREAM_END)) {
 	    	GST_ERROR("BZ2_bzDecompress returned code %d", (int) ret);
-	    	goto done;	
+	    	goto done;
 	    }
 	    GST_INFO("BZ2_bzDecompress returned %d", (int) ret);
 
