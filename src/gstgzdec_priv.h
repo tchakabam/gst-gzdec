@@ -1,5 +1,31 @@
 #pragma once
 
+#define INPUT_TASK_LOCK(element) REC_MUTEX_LOCK(&element->input_task_mutex)
+#define INPUT_TASK_UNLOCK(element) REC_MUTEX_UNLOCK(&element->input_task_mutex)
+#define SRCPAD_TASK_LOCK(element) REC_MUTEX_LOCK(GST_PAD_GET_STREAM_LOCK(&element->srcpad))
+#define SRCPAD_TASK_UNLOCK(element) REC_MUTEX_UNLOCK(GST_PAD_GET_STREAM_LOCK(&element->srcpad))
+
+#define INPUT_QUEUE_WAIT(element) g_cond_wait(&element->input_queue_run_cond, &filter->input_queue_mutex)
+#define INPUT_QUEUE_SIGNAL(element) g_cond_signal(&element->input_queue_run_cond)
+
+#define OUTPUT_QUEUE_WAIT(element) g_cond_wait(&element->output_queue_run_cond, &filter->output_queue_mutex)
+#define OUTPUT_QUEUE_SIGNAL(element) g_cond_signal(&element->output_queue_run_cond)
+
+#define INPUT_QUEUE_LOCK(element) g_mutex_lock(&element->input_queue_mutex)
+#define INPUT_QUEUE_UNLOCK(element) g_mutex_unlock(&element->input_queue_mutex)
+
+#define OUTPUT_QUEUE_LOCK(element) g_mutex_lock(&element->output_queue_mutex)
+#define OUTPUT_QUEUE_UNLOCK(element) g_mutex_unlock(&element->output_queue_mutex)
+
+// decoder adapters
+#define CREATE_ZIP_DECODER(element, writer_func) zipdec_stream_new(element, writer_func)
+#define ZIP_DECODER_DECODE(decoder, buffer) zipdec_stream_digest_buffer(decoder, buffer)
+
+// setup which implementation to use
+#define CREATE_DECODER CREATE_ZIP_DECODER
+#define GET_DECODER(element) ZIP_DECODER_STREAM(element->decoder)
+#define DECODE_BUFFER ZIP_DECODER_DECODE
+
 typedef struct _GstGzDecPrivate GstGzDecPrivate;
 
 GstBuffer* input_queue_pop_buffer (GstGzDec *filter);
@@ -7,10 +33,6 @@ void srcpad_task_func(gpointer user_data);
 void output_queue_append_data (GstGzDec *filter, gpointer data, gsize bytes);
 
 // FIXME: make private funcs all static
-
-ZipDecoderStream* get_decoder(GstGzDec * filter) {
-  return ZIP_DECODER_STREAM(filter->decoder);
-}
 
 void input_queue_signal_resume (GstGzDec* filter) {
     INPUT_QUEUE_LOCK(filter);
@@ -159,7 +181,7 @@ void process_one_input_buffer (GstGzDec* filter, GstBuffer* buf) {
 
 	// DO ACTUAL PROCESSING HERE!!
 
-	zipdec_stream_digest_buffer(get_decoder(filter), buf);
+	DECODE_BUFFER(GET_DECODER(filter), buf);
 
 	//////////////////////////////
 	//////////////////////////////

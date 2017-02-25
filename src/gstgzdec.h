@@ -48,72 +48,7 @@
 
 #include <gst/gst.h>
 
-#define USE_GSTATIC_REC_MUTEX FALSE // WARNING: GStaticRecMutex is deprecated !!!
-									// Meanwhile this is what is actually expected by the GStreamer 0.10.x 
-									// GstTask API. The two implementations might however compatible.
-#define USE_GSTREAMER_1_DOT_0_API TRUE
-
-#if USE_GSTREAMER_1_DOT_0_API
-
-  void buffer_set_data (GstBuffer* buf, gpointer data, gsize size) {
-    GstMapInfo map;
-    if (!gst_buffer_map(buf, &map, GST_MAP_WRITE)) {
-      GST_ERROR ("Error mapping buffer for write access: %" GST_PTR_FORMAT, buf);
-      return;
-    }
-
-    if (size > map.size) {
-      GST_WARNING ("Mapped memory is smaller than data!");
-    }
-
-    memcpy(map.data, data, 
-      size >= map.size ? map.size : size);
-
-    gst_buffer_unmap (buf, &map);
-  }
-
-	#define CREATE_TASK(func, data) gst_task_new(func, data, NULL) // just monkey-patch this
-	#define BUFFER_SET_DATA(buf, data, size) buffer_set_data(buf, data, size)
-	#define BUFFER_ALLOC(size) gst_buffer_new_allocate(NULL, size, NULL)
-  #define GST_BUFFER_SIZE(buf) gst_buffer_get_size(buf)
-
-#else // fallback to default: GStreamer 0.10.x API
-
-	#define CREATE_TASK(func, data) gst_task_create(func, data)
-  #define BUFFER_GET_DATA(buf) GST_BUFFER_DATA(buf)
-	#define BUFFER_SET_DATA(buf, data, size) gst_buffer_set_data(buf, data, size)
-	#define BUFFER_ALLOC(size) gst_buffer_new_and_alloc(size)
-
-#endif
-
-#if USE_GSTATIC_REC_MUTEX
-	typedef GStaticRecMutex MUTEX;
-	#define REC_MUTEX_LOCK g_static_rec_mutex_lock
-  #define REC_MUTEX_UNLOCK g_static_rec_mutex_unlock
-	#define REC_MUTEX_INIT g_static_rec_mutex_init
-#else
-	typedef GRecMutex MUTEX;
-	#define REC_MUTEX_LOCK g_rec_mutex_lock
-  #define REC_MUTEX_UNLOCK g_rec_mutex_unlock
-	#define REC_MUTEX_INIT g_rec_mutex_init
-#endif
-
-#define INPUT_TASK_LOCK(element) REC_MUTEX_LOCK(&element->input_task_mutex)
-#define INPUT_TASK_UNLOCK(element) REC_MUTEX_UNLOCK(&element->input_task_mutex)
-#define SRCPAD_TASK_LOCK(element) REC_MUTEX_LOCK(GST_PAD_GET_STREAM_LOCK(&element->srcpad))
-#define SRCPAD_TASK_UNLOCK(element) REC_MUTEX_UNLOCK(GST_PAD_GET_STREAM_LOCK(&element->srcpad))
-
-#define INPUT_QUEUE_WAIT(element) g_cond_wait(&element->input_queue_run_cond, &filter->input_queue_mutex)
-#define INPUT_QUEUE_SIGNAL(element) g_cond_signal(&element->input_queue_run_cond)
-
-#define OUTPUT_QUEUE_WAIT(element) g_cond_wait(&element->output_queue_run_cond, &filter->output_queue_mutex)
-#define OUTPUT_QUEUE_SIGNAL(element) g_cond_signal(&element->output_queue_run_cond)
-
-#define INPUT_QUEUE_LOCK(element) g_mutex_lock(&element->input_queue_mutex)
-#define INPUT_QUEUE_UNLOCK(element) g_mutex_unlock(&element->input_queue_mutex)
-
-#define OUTPUT_QUEUE_LOCK(element) g_mutex_lock(&element->output_queue_mutex)
-#define OUTPUT_QUEUE_UNLOCK(element) g_mutex_unlock(&element->output_queue_mutex)
+#include <gstgzdec_compat.h>
 
 G_BEGIN_DECLS
 
