@@ -60,6 +60,7 @@
 #include <stdlib.h>
 
 #include <zlib.h>
+#include <bzlib.h>
 
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
@@ -72,6 +73,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_gz_dec_debug);
 #define GST_CAT_DEFAULT gst_gz_dec_debug
 
+#include "gstgzdec_bzipdecstream.h"
 #include "gstgzdec_zipdecstream.h"
 #include "gstgzdec_priv.h"
 

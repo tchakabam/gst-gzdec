@@ -1,14 +1,15 @@
 #pragma once
 
-#define ZIP_DEC_STREAM_OUT_BUFFER_SIZE 16*1024
-#define ZIP_DECODER_STREAM(ptr) ((ZipDecoderStream*)ptr) 
+/* This is stream wrapper for Zlib inflate */
 
+#define ZIP_DEC_STREAM_OUT_BUFFER_SIZE 16*1024
 #define ZLIB_INFLATE_WINDOW_BITS 32 // This value enables gzip as well as zlib formats
 									// by automatic header detection.
 									// Force to Gzip only with 16
 									// TODO: one could make this a run-time param
 									// of the wrapper constructor.
 
+#define ZIP_DECODER_STREAM(ptr) ((ZipDecoderStream*)ptr) 
 typedef struct _ZipDecoderStream ZipDecoderStream;
 typedef void (*StreamWriterFunc) (gpointer user_data, gpointer data, gsize bytes);
 typedef z_stream ZStream;
