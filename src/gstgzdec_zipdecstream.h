@@ -21,7 +21,7 @@ struct _ZipDecoderStream {
 	gboolean header;
 };
 
-ZipDecoderStream* zipdec_stream_new(gpointer user_data, StreamWriterFunc writer_func) {
+static ZipDecoderStream* zipdec_stream_new(gpointer user_data, StreamWriterFunc writer_func) {
 	ZipDecoderStream* wrapper = ZIP_DECODER_STREAM(g_malloc(sizeof(ZipDecoderStream)));
 	wrapper->user_data = user_data;
 	wrapper->writer_func = writer_func;
@@ -37,16 +37,16 @@ ZipDecoderStream* zipdec_stream_new(gpointer user_data, StreamWriterFunc writer_
 	return wrapper;
 }
 
-void zipdec_stream_free(ZipDecoderStream* wrapper) {
+static void zipdec_stream_free(ZipDecoderStream* wrapper) {
 	inflateEnd(&wrapper->stream);
 	g_free(wrapper);
 }
 
-gboolean zipdec_stream_digest_buffer(void *w, GstBuffer* buf) {
+static gboolean zipdec_stream_digest_buffer(void *w, GstBuffer* buf) {
 
 	ZipDecoderStream *wrapper = ZIP_DECODER_STREAM(w);
 
-	GST_INFO ("Processing one buffer for inflation: %" GST_PTR_FORMAT, buf);
+	GST_TRACE("Processing one buffer for inflation: %" GST_PTR_FORMAT, buf);
 
 	// unwrap components
 	gpointer user_data = wrapper->user_data;
@@ -90,9 +90,9 @@ gboolean zipdec_stream_digest_buffer(void *w, GstBuffer* buf) {
 	g_print("\n");
 #endif
 
-    GST_INFO("Input pointer is %p", buffer_data);
-	GST_INFO ("Input chunk size: %d", (int) buffer_size);
-	GST_INFO ("Total output buffer size: %d", out_size);
+    GST_TRACE("Input pointer is %p", buffer_data);
+	GST_TRACE("Input chunk size: %d", (int) buffer_size);
+	GST_TRACE("Total output buffer size: %d", out_size);
 
     // set initial input pointer and size
     strm->avail_in = buffer_size;
@@ -108,12 +108,12 @@ gboolean zipdec_stream_digest_buffer(void *w, GstBuffer* buf) {
 	    // as our output buffer can take
 	    // therefore we need to iterate eventually several times 
 	    // over this function
-	    GST_INFO ("Running inflate func now");
+	    GST_TRACE("Running inflate func now");
 	    if ((ret = inflate(strm, Z_NO_FLUSH)) == Z_STREAM_ERROR) {
 	    	GST_ERROR("Zlib inflate returned Z_STREAM_ERROR");
 	    	goto done;	
 	    }
-	    GST_INFO("Inflate returned %d", (int) ret);
+	    GST_TRACE("Inflate returned %d", (int) ret);
 	    switch (ret) {
 	    case Z_NEED_DICT:
 	        ret = Z_DATA_ERROR;/* and fall through */
@@ -124,11 +124,11 @@ gboolean zipdec_stream_digest_buffer(void *w, GstBuffer* buf) {
 	        goto done;
 	    }
 
-		GST_INFO ("Remaining output buffer bytes: %d", (int) strm->avail_out);
+		GST_TRACE("Remaining output buffer bytes: %d", (int) strm->avail_out);
 
 	    have = out_size - strm->avail_out;
 
-	    GST_INFO("Have %d inflated bytes, writing to output stream", (int) have);
+	    GST_TRACE("Have %d inflated bytes, writing to output stream", (int) have);
 
 	    writer_func(user_data, out, have);
     }

@@ -145,12 +145,6 @@ gst_gz_dec_class_init (GstGzDecClass * klass)
   gstelement_class->change_state = gst_gz_dec_change_state;
 }
 
-// Just an adapter function resulting from the abstraction
-static void
-gst_gz_stream_writer_func (gpointer user_data, gpointer data, gsize bytes) {
-  output_queue_append_data (user_data, data, bytes);
-}
-
 /* initialize the new element
  * instantiate pads and add them to element
  * set pad calback functions
@@ -171,26 +165,21 @@ gst_gz_dec_init (GstGzDec * filter)
   GST_PAD_SET_PROXY_CAPS (filter->srcpad);
   gst_element_add_pad (GST_ELEMENT (filter), filter->srcpad);
 
+  // EOS event store 
   filter->pending_eos = NULL;
-
+  // queueing state flags
   filter->input_task_resume = FALSE;
   filter->srcpad_task_resume = FALSE;
-
   // Queues
   filter->input_queue = g_queue_new();
   filter->output_queue = g_queue_new();
-
-  // Init locks
+  // Init locks 
   g_mutex_init(&filter->input_queue_mutex);
   g_mutex_init(&filter->output_queue_mutex);
   REC_MUTEX_INIT(&filter->input_task_mutex);
-
+  // queueing conds
   g_cond_init(&filter->input_queue_run_cond);
   g_cond_init(&filter->output_queue_run_cond);
-
-  // Create input task
-  filter->input_task = CREATE_TASK(input_task_func, filter);
-  gst_task_set_lock(filter->input_task, &filter->input_task_mutex);
 
   GST_INFO_OBJECT(filter, "Done initializing element");
 }
@@ -233,8 +222,12 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
   case GST_STATE_CHANGE_NULL_TO_READY:
     // Initialize things
     GST_OBJECT_LOCK(filter);
+    // reset EOS flag
     filter->eos = FALSE;
+    // create input task
+    filter->input_task = CREATE_TASK(input_task_func, filter);
     GST_OBJECT_UNLOCK(filter);
+    gst_task_set_lock(filter->input_task, &filter->input_task_mutex);
     // Pre-warm our input processing worker
     gst_task_pause(filter->input_task);
     break;
@@ -266,6 +259,15 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
     // (but the tasks are re-usable)
     srcpad_task_join(filter);
     input_task_join(filter);
+    // clean up decoder
+    if (filter->decoder) {
+      clear_decoder(filter);
+    }
+    // clean up task object
+    if (filter->input_task) {
+      g_object_unref(filter->input_task);
+      filter->input_task = NULL;
+    }
     break;
   }
 
@@ -320,40 +322,6 @@ gst_gz_dec_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
   return ret;
 }
 
-static void
-gst_gz_dec_try_feed_stream_start(GstGzDec* filter, GstBuffer* buf)
-{
-  GstMapInfo map;
-
-  if (filter->stream_start_fill == sizeof(filter->stream_start)) {
-    return;
-  }
-
-  if(!gst_buffer_map(buf, &map, GST_MAP_READ)) {
-    GST_ERROR("Error mapping for read access");
-    return;
-  }
-
-  for (;filter->stream_start_fill < sizeof(filter->stream_start) 
-    && filter->stream_start_fill < map.size; 
-    filter->stream_start_fill++) {
-    filter->stream_start[filter->stream_start_fill] = map.data[filter->stream_start_fill];
-  }
-
-  GST_DEBUG ("Got stream starting chars: %x %x", filter->stream_start[0], filter->stream_start[1]);
-
-  gst_buffer_unmap(buf, &map);
-
-  g_assert(filter->decoder == NULL);
-
-  if (filter->stream_start_fill == sizeof(filter->stream_start)) {
-
-    GST_INFO ("Setup decoder");
-
-    setup_decoder(filter, gst_gz_stream_writer_func);
-  }
-} 
-
 /* chain function
  * this function does the actual processing
  */
@@ -367,7 +335,7 @@ gst_gz_dec_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   GST_TRACE_OBJECT(filter, "Entering chain function: %" GST_PTR_FORMAT, buf);
 
   if (!filter->decoder) {
-    gst_gz_dec_try_feed_stream_start(filter, buf);
+    try_feed_stream_start(filter, buf);
   }
 
   g_assert(filter->decoder != NULL);

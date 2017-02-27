@@ -13,7 +13,7 @@ struct _BzipDecoderStream {
 	StreamWriterFunc writer_func;
 };
 
-BzipDecoderStream* bzipdec_stream_new(gpointer user_data, StreamWriterFunc writer_func) {
+static BzipDecoderStream* bzipdec_stream_new(gpointer user_data, StreamWriterFunc writer_func) {
 	BzipDecoderStream* wrapper = BZIP_DECODER_STREAM(g_malloc(sizeof(BzipDecoderStream)));
 	// NOTE: 
 	// If we dont do this memset BZ2_bzDecompressInit crashes 1 out of 5 times consistent 
@@ -32,14 +32,14 @@ BzipDecoderStream* bzipdec_stream_new(gpointer user_data, StreamWriterFunc write
 }
 
 
-void bzipdec_stream_free(BzipDecoderStream* wrapper) {
+static void bzipdec_stream_free(BzipDecoderStream* wrapper) {
 	BZ2_bzDecompressEnd(&wrapper->stream);
 	g_free(wrapper);
 }
 
-gboolean bzipdec_stream_digest_buffer(void *w, GstBuffer* buf) {
+static gboolean bzipdec_stream_digest_buffer(void *w, GstBuffer* buf) {
 
-	GST_INFO ("Processing one buffer for inflation: %" GST_PTR_FORMAT, buf);
+	GST_TRACE ("Processing one buffer for inflation: %" GST_PTR_FORMAT, buf);
 
 	BzipDecoderStream *wrapper = BZIP_DECODER_STREAM(w);
 
@@ -85,9 +85,9 @@ gboolean bzipdec_stream_digest_buffer(void *w, GstBuffer* buf) {
 	g_print("\n");
 #endif
 
-    GST_INFO("Input pointer is %p", buffer_data);
-	GST_INFO ("Input chunk size: %d", (int) buffer_size);
-	GST_INFO ("Total output buffer size: %d", out_size);
+    GST_TRACE("Input pointer is %p", buffer_data);
+	GST_TRACE ("Input chunk size: %d", (int) buffer_size);
+	GST_TRACE ("Total output buffer size: %d", out_size);
 
     // set initial input pointer and size
     strm->avail_in = buffer_size;
@@ -103,19 +103,19 @@ gboolean bzipdec_stream_digest_buffer(void *w, GstBuffer* buf) {
 	    // as our output buffer can take
 	    // therefore we need to iterate eventually several times 
 	    // over this function
-	    GST_INFO ("Running decompress func now");
+	    GST_TRACE ("Running decompress func now");
 	    ret = BZ2_bzDecompress(strm);
 	    if (!(ret == BZ_OK || ret == BZ_STREAM_END)) {
 	    	GST_ERROR("BZ2_bzDecompress returned code %d", (int) ret);
 	    	goto done;
 	    }
-	    GST_INFO("BZ2_bzDecompress returned %d", (int) ret);
+	    GST_TRACE("BZ2_bzDecompress returned %d", (int) ret);
 
-		GST_INFO ("Remaining output buffer bytes: %d", (int) strm->avail_out);
+		GST_TRACE ("Remaining output buffer bytes: %d", (int) strm->avail_out);
 
 	    have = out_size - strm->avail_out;
 
-	    GST_INFO("Have %d inflated bytes, writing to output stream", (int) have);
+	    GST_TRACE("Have %d inflated bytes, writing to output stream", (int) have);
 
 	    writer_func(user_data, out, have);
     }
