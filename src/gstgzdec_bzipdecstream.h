@@ -37,9 +37,11 @@ void bzipdec_stream_free(BzipDecoderStream* wrapper) {
 	g_free(wrapper);
 }
 
-gboolean bzipdec_stream_digest_buffer(BzipDecoderStream *wrapper, GstBuffer* buf) {
+gboolean bzipdec_stream_digest_buffer(void *w, GstBuffer* buf) {
 
 	GST_INFO ("Processing one buffer for inflation: %" GST_PTR_FORMAT, buf);
+
+	BzipDecoderStream *wrapper = BZIP_DECODER_STREAM(w);
 
 	// unwrap components
 	gpointer user_data = wrapper->user_data;

@@ -1,0 +1,65 @@
+
+# GstGzDec 
+
+## Usage
+
+Supports gzip and bzip streams. The stream type is auto-detected based on the first two bytes. 
+
+See function `stream_is_bzip`, `stream_is_bzip` and `setup_decoder` in the private functions declarations.
+
+## Files
+
+`gstgzdec.*` files contain the element declarations, plugin registration and implementations of `GstElement` and `GObject` class functions.
+
+`gstgzdec_priv.h` contains private functions not directly called by the base class implementations.
+
+`gstgzdec_bzipdecstream.h` and `gstgzdec_zipdecstream.h` contain a stream-like binding to the Gzip/Bzip lib (libbzip2 and zlib respectively) that provide an implementation of a generic decoding function which allows abstraction between the two formats.
+
+`gstgzdec_compat.h` provides polyfill declarations to allow backward compatibility towards GStreamer 0.10 API.
+
+`test.sh` is a shell script for producing test data and running pipelines with the two respective formats that produce output to validate behavior.
+
+## Compilation
+
+To compile towards GStreamer 0.10 API set `USE_GSTREAMER_1_DOT_0_API` in `gstgzdec_compat.h` to `FALSE`. Also it will be necessary to set `USE_GSTATIC_REC_MUTEX` to `TRUE`. The latter can also be used with GStreamer 1.0 API but will produce deprecation warnings.
+
+An autotools project is provided to check presence of necessary libraries and generate a Makefile for compilation and install.
+
+```
+./autogen.sh
+make
+sudo make install
+```
+
+## Testing
+
+### Acceptance test
+
+When running `test.sh` two output files are produced from the respective two input gzip/bzip archives. These should be identical with the original uncompressed test file.
+
+### How test data is produced
+
+For gzip:
+
+```
+cat test/test.tiff | zlib-flate -compress > test/test.tiff.zip
+```
+
+For bzip:
+
+```
+cat test/test.tiff | bzip2 -zc > test/test.tiff.bzip
+```
+
+## Comments
+
+* Compatibility with the GStreamer 0.10 could not be tested on my system. However it has been taken care of to wrap or fill-in all the critical functions so that in principle against GStreamer 0.10 API it should work - but can't be guaranteed. The principle of a compile-time switch and necessary declarations to adapt the code to both APIs has been realized however.
+
+* All the compatibility issues between the two APIs are handled inside the `gstgzdec_compat.h` file, except the ones related to buffer mapping/unmapping. The only solution here was to have compile-time switches in place where buffers are actually read. It would not be safe in principle re-implementing something such as 0.10's `GST_BUFFER_DATA` as we would have to return an unmapped buffer.
+
+* It has also been tested that the pipeline does not stall in case of a file error (e.g wrong filename).
+
+* We are currently not producing a proper Gzip archive as test data but a zlib format stream.
+
+* When producing a gzip archive with the actual `gzip` utility, this wouldn't work here. ZLib's `inflate` will produce `Z_DATA_ERROR` (-3). This is odd as the window-parameter in the Zlib initialization used (32) should allow for any kind of zlib/gzip streams to work. See documentation about `inflateInit2` in http://zlib.net/manual.html. Possibly I am missing something here about how we initialize Zlib inflation, how or which data we provide, or not using `gzip` utility correctly to produce the correct test data.
+

@@ -3,7 +3,7 @@
 /* This is stream wrapper for Zlib inflate */
 
 #define ZIP_DEC_STREAM_OUT_BUFFER_SIZE 16*1024
-#define ZLIB_INFLATE_WINDOW_BITS 32 // This value enables gzip as well as zlib formats
+#define ZLIB_INFLATE_WINDOW_BITS 32 // This value (32) enables gzip as well as zlib formats
 									// by automatic header detection.
 									// Force to Gzip only with 16
 									// TODO: one could make this a run-time param
@@ -18,6 +18,7 @@ struct _ZipDecoderStream {
 	ZStream stream;
 	gpointer user_data;
 	StreamWriterFunc writer_func;
+	gboolean header;
 };
 
 ZipDecoderStream* zipdec_stream_new(gpointer user_data, StreamWriterFunc writer_func) {
@@ -31,7 +32,7 @@ ZipDecoderStream* zipdec_stream_new(gpointer user_data, StreamWriterFunc writer_
     wrapper->stream.next_in = Z_NULL;
 	int ret = inflateInit2(&wrapper->stream, ZLIB_INFLATE_WINDOW_BITS);
     if (ret != Z_OK) {
-    	GST_ERROR("Got code %d when calling zlib inflateInit", (int) ret);
+    	GST_ERROR("Got code %d when calling Zlib inflateInit2", (int) ret);
     }
 	return wrapper;
 }
@@ -41,7 +42,9 @@ void zipdec_stream_free(ZipDecoderStream* wrapper) {
 	g_free(wrapper);
 }
 
-gboolean zipdec_stream_digest_buffer(ZipDecoderStream *wrapper, GstBuffer* buf) {
+gboolean zipdec_stream_digest_buffer(void *w, GstBuffer* buf) {
+
+	ZipDecoderStream *wrapper = ZIP_DECODER_STREAM(w);
 
 	GST_INFO ("Processing one buffer for inflation: %" GST_PTR_FORMAT, buf);
 

@@ -67,6 +67,13 @@ G_BEGIN_DECLS
 typedef struct _GstGzDec      GstGzDec;
 typedef struct _GstGzDecClass GstGzDecClass;
 
+typedef gboolean (*GstGzDecFunc) (gpointer dec_wrapper, GstBuffer* buf);
+
+typedef enum {
+  GZIP,
+  BZIP
+} GstGzDecStreamType;
+
 struct _GstGzDec
 {
   GstElement element;
@@ -92,6 +99,11 @@ struct _GstGzDec
   gboolean input_task_resume;
 
   gpointer decoder;
+  GstGzDecFunc decode_func;
+  GstGzDecStreamType stream_type;
+
+  gchar stream_start[2];
+  guint stream_start_fill;
 };
 
 struct _GstGzDecClass 

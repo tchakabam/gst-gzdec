@@ -17,25 +17,54 @@
 #define OUTPUT_QUEUE_LOCK(element) g_mutex_lock(&element->output_queue_mutex)
 #define OUTPUT_QUEUE_UNLOCK(element) g_mutex_unlock(&element->output_queue_mutex)
 
-// decoder adapters
+// Decoder adapters
 
 // Gzip
 #define CREATE_ZIP_DECODER(element, writer_func) zipdec_stream_new(element, writer_func)
-#define ZIP_DECODER_DECODE(decoder, buffer) zipdec_stream_digest_buffer(decoder, buffer)
+#define ZIP_DECODER_DECODE zipdec_stream_digest_buffer
 // Bzip
 #define CREATE_BZIP_DECODER(element, writer_func) bzipdec_stream_new(element, writer_func)
-#define BZIP_DECODER_DECODE(decoder, buffer) bzipdec_stream_digest_buffer(decoder, buffer)
-
-// setup which implementation to use
-#define CREATE_DECODER CREATE_BZIP_DECODER
-#define GET_DECODER(element) BZIP_DECODER_STREAM(element->decoder)
-#define DECODE_BUFFER BZIP_DECODER_DECODE
-
-typedef struct _GstGzDecPrivate GstGzDecPrivate;
+#define BZIP_DECODER_DECODE bzipdec_stream_digest_buffer
 
 GstBuffer* input_queue_pop_buffer (GstGzDec *filter);
 void srcpad_task_func(gpointer user_data);
 void output_queue_append_data (GstGzDec *filter, gpointer data, gsize bytes);
+
+gboolean stream_is_bzip(GstGzDec* filter) {
+	return filter->stream_start[0] == 0x42
+		&& filter->stream_start[1] == 0x5a;
+}
+
+gboolean stream_is_gzip(GstGzDec* filter) {
+	return filter->stream_start[0] == 0x78
+		&& filter->stream_start[1] == 0xffffff9c;
+}
+
+void setup_decoder (GstGzDec* filter, void* stream_writer_func) {
+
+	GST_DEBUG ("Got stream starting chars: %x %x", 
+			filter->stream_start[0], 
+			filter->stream_start[1]);
+
+	if (stream_is_bzip(filter)) {
+		GST_INFO ("Stream is bzip");
+		filter->stream_type = BZIP;
+		filter->decoder = CREATE_BZIP_DECODER(filter, stream_writer_func);
+		filter->decode_func = BZIP_DECODER_DECODE;
+		return;
+	}
+	else if (stream_is_gzip(filter)) {
+		GST_INFO ("Stream is gzip");
+		filter->stream_type = GZIP;
+		filter->decoder = CREATE_ZIP_DECODER(filter, stream_writer_func);
+		filter->decode_func = ZIP_DECODER_DECODE;
+		return;
+	}
+
+	GST_WARNING ("Could not recongnize stream-start!");
+
+	g_warn_if_reached();
+}
 
 // FIXME: make private funcs all static
 
@@ -179,7 +208,7 @@ void process_one_input_buffer (GstGzDec* filter, GstBuffer* buf) {
 
 	// DO ACTUAL PROCESSING HERE!!
 
-	DECODE_BUFFER(GET_DECODER(filter), buf);
+	filter->decode_func(filter->decoder, buf);
 
 	//////////////////////////////
 	//////////////////////////////

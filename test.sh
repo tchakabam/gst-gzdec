@@ -13,13 +13,15 @@ export GST_DEBUG="*:2,gzdec:9"
 
 gst-inspect-1.0 | grep gzdec
 
+echo "\nProducing test data":
+
+cat test/test.tiff | zlib-flate -compress > test/test.tiff.zip
+cat test/test.tiff | bzip2 -zc > test/test.tiff.bzip
+
 echo "\nLaunching pipeline:"
 
-# gst-launch-1.0 filesrc location=test/test.txt.zip ! gzdec ! filesink location=test/test.out.txt
-
-gst-launch-1.0 filesrc location=test/test.png.bzip ! gzdec ! filesink location=test/test.out.png
-
-# gst-launch-1.0 filesrc location=test/test.png.zip ! gzdec ! filesink location=test/test.out.png
+gst-launch-1.0 filesrc location=test/test.tiff.zip ! gzdec ! filesink location=test/test.out.zip.tiff
+#gst-launch-1.0 filesrc location=test/test.tiff.bzip ! gzdec ! filesink location=test/test.out.bzip.tiff
 
 echo "\n"
 

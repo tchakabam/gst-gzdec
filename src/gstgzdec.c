@@ -133,8 +133,8 @@ gst_gz_dec_class_init (GstGzDecClass * klass)
 
   gst_element_class_set_details_simple(gstelement_class,
     "Gzip decoder",
-    "FIXME:Generic",
-    "FIXME:Generic Template Element",
+    "Decoder",
+    "Decode compressed zip data",
     "Stephan Hesse <disparat@gmail.com>");
 
   gst_element_class_add_pad_template (gstelement_class,
@@ -191,10 +191,6 @@ gst_gz_dec_init (GstGzDec * filter)
   // Create input task
   filter->input_task = CREATE_TASK(input_task_func, filter);
   gst_task_set_lock(filter->input_task, &filter->input_task_mutex);
-
-  GST_INFO_OBJECT(filter, "Creating decoder stream wrapper instance");
-
-  filter->decoder = CREATE_DECODER(filter, gst_gz_stream_writer_func);
 
   GST_INFO_OBJECT(filter, "Done initializing element");
 }
@@ -289,6 +285,15 @@ gst_gz_dec_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
       GST_EVENT_TYPE_NAME (event), event);
 
   switch (GST_EVENT_TYPE (event)) {
+  case GST_EVENT_STREAM_START:
+
+    filter->stream_start_fill
+      = filter->stream_start[0] 
+      = filter->stream_start[1] = 0;
+    filter->eos = FALSE;
+
+    ret = gst_pad_event_default (pad, parent, event);
+    break;
   case GST_EVENT_EOS:
     GST_OBJECT_LOCK(filter);
     filter->pending_eos = event;
@@ -315,6 +320,40 @@ gst_gz_dec_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
   return ret;
 }
 
+static void
+gst_gz_dec_try_feed_stream_start(GstGzDec* filter, GstBuffer* buf)
+{
+  GstMapInfo map;
+
+  if (filter->stream_start_fill == sizeof(filter->stream_start)) {
+    return;
+  }
+
+  if(!gst_buffer_map(buf, &map, GST_MAP_READ)) {
+    GST_ERROR("Error mapping for read access");
+    return;
+  }
+
+  for (;filter->stream_start_fill < sizeof(filter->stream_start) 
+    && filter->stream_start_fill < map.size; 
+    filter->stream_start_fill++) {
+    filter->stream_start[filter->stream_start_fill] = map.data[filter->stream_start_fill];
+  }
+
+  GST_DEBUG ("Got stream starting chars: %x %x", filter->stream_start[0], filter->stream_start[1]);
+
+  gst_buffer_unmap(buf, &map);
+
+  g_assert(filter->decoder == NULL);
+
+  if (filter->stream_start_fill == sizeof(filter->stream_start)) {
+
+    GST_INFO ("Setup decoder");
+
+    setup_decoder(filter, gst_gz_stream_writer_func);
+  }
+} 
+
 /* chain function
  * this function does the actual processing
  */
@@ -325,7 +364,13 @@ gst_gz_dec_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
   filter = GST_GZDEC (parent);
 
-  GST_TRACE_OBJECT(filter, "Entering chain function");
+  GST_TRACE_OBJECT(filter, "Entering chain function: %" GST_PTR_FORMAT, buf);
+
+  if (!filter->decoder) {
+    gst_gz_dec_try_feed_stream_start(filter, buf);
+  }
+
+  g_assert(filter->decoder != NULL);
 
   // once task is paused sooner or later
   // we should be able to take the worker lock
