@@ -1,11 +1,15 @@
 
-# GstGzDec 
+# GstGzDec - or how to make a GStreamer element for async processing of anything ...
+
+## ... that ships in a GST plugin with autotools etc ...
 
 ## What & Why
 
-This is an example GStreamer element. Why has it been published: Mainly to deliver a proof-of-concept around producing plugins to this framework - the ready-to-use way. 
+This is an example GStreamer element. Why has it been published: Mainly to deliver a proof-of-concept around producing plugins to this framework - the ready-to-use way.
 
-Consider it like some sort of template that actually does somthing meaningful. It is a generic processing element with one sink and one src (single input/ouput, thus a typical "filter" from a systems POV). The way it has been implemented it can easily be recrafted by substituting parts easily to process anything (take some input, produce some output). The processing implementation has been well abstracted.
+It's an example of how a GStreamer element will wrap some functionnality of existing C libraries X/Y/Z (in this case zlib and libbzip2) - and of a few more things.
+
+Consider it like some sort of template that actually does something meaningful. It is a generic processing element with one sink and one src (single input/ouput, thus a typical "filter" from a systems POV). The way it has been implemented it can easily be recrafted by substituting parts easily to process anything (take some input, produce some output). The processing implementation has been well abstracted.
 
 Furthermore it will allow non-blocking behaviour on both the upstream src-pad as well as not blocking it's on processing worker in case downstream pads are blocking at any point. This is achieved by double-queuing on pre-  and post processing data. The way it has been done here is consciously not using GStreamer queue elements as bin'd pipelines but to actually integrate this into the very elements functionnality. This makes us independent from GST's queue's implementation(s). Thus it might allow multi-threaded processing if the task is requiring it or takes any advantage from it.
 
