@@ -70,45 +70,45 @@ typedef struct _GstGzDecClass GstGzDecClass;
 typedef gboolean (*GstGzDecFunc)(gpointer dec_wrapper, GstBuffer* buf);
 
 typedef enum {
-	GZIP,
-	BZIP
+        GZIP,
+        BZIP
 } GstGzDecStreamType;
 
 struct _GstGzDec
 {
-	GstElement element;
+        GstElement element;
 
-	GstPad *sinkpad, *srcpad;
+        GstPad *sinkpad, *srcpad;
 
-	GQueue *input_queue;
-	GQueue *output_queue;
+        GQueue *input_queue;
+        GQueue *output_queue;
 
-	GstTask *input_task;
-	MUTEX input_task_mutex;
+        GstTask *input_task;
+        MUTEX input_task_mutex;
 
-	GCond output_queue_run_cond;
-	GCond input_queue_run_cond;
+        GCond output_queue_run_cond;
+        GCond input_queue_run_cond;
 
-	GMutex input_queue_mutex;
-	GMutex output_queue_mutex;
+        GMutex input_queue_mutex;
+        GMutex output_queue_mutex;
 
-	GstEvent* pending_eos;
+        GstEvent* pending_eos;
 
-	gboolean eos;
-	gboolean srcpad_task_resume;
-	gboolean input_task_resume;
+        gboolean eos;
+        gboolean srcpad_task_resume;
+        gboolean input_task_resume;
 
-	gpointer decoder;
-	GstGzDecFunc decode_func;
-	GstGzDecStreamType stream_type;
+        gpointer decoder;
+        GstGzDecFunc decode_func;
+        GstGzDecStreamType stream_type;
 
-	gchar stream_start[2];
-	guint stream_start_fill;
+        gchar stream_start[2];
+        guint stream_start_fill;
 };
 
 struct _GstGzDecClass
 {
-	GstElementClass parent_class;
+        GstElementClass parent_class;
 };
 
 GType gst_gz_dec_get_type (void);

@@ -80,13 +80,13 @@ GST_DEBUG_CATEGORY_STATIC (gst_gz_dec_debug);
 /* Filter signals and args */
 enum
 {
-	/* FILL ME */
-	LAST_SIGNAL
+        /* FILL ME */
+        LAST_SIGNAL
 };
 
 enum
 {
-	PROP_0
+        PROP_0
 };
 
 /* the capabilities of the inputs and outputs.
@@ -125,24 +125,24 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition);
 static void
 gst_gz_dec_class_init (GstGzDecClass * klass)
 {
-	GObjectClass *gobject_class = (GObjectClass *) klass;
-	GstElementClass *gstelement_class = (GstElementClass *) klass;
+        GObjectClass *gobject_class = (GObjectClass *) klass;
+        GstElementClass *gstelement_class = (GstElementClass *) klass;
 
-	gobject_class->set_property = gst_gz_dec_set_property;
-	gobject_class->get_property = gst_gz_dec_get_property;
+        gobject_class->set_property = gst_gz_dec_set_property;
+        gobject_class->get_property = gst_gz_dec_get_property;
 
-	gst_element_class_set_details_simple(gstelement_class,
-	                                     "Gzip decoder",
-	                                     "Decoder",
-	                                     "Decode compressed zip data",
-	                                     "Stephan Hesse <disparat@gmail.com>");
+        gst_element_class_set_details_simple(gstelement_class,
+                                             "Gzip decoder",
+                                             "Decoder",
+                                             "Decode compressed zip data",
+                                             "Stephan Hesse <disparat@gmail.com>");
 
-	gst_element_class_add_pad_template (gstelement_class,
-	                                    gst_static_pad_template_get (&src_factory));
-	gst_element_class_add_pad_template (gstelement_class,
-	                                    gst_static_pad_template_get (&sink_factory));
+        gst_element_class_add_pad_template (gstelement_class,
+                                            gst_static_pad_template_get (&src_factory));
+        gst_element_class_add_pad_template (gstelement_class,
+                                            gst_static_pad_template_get (&sink_factory));
 
-	gstelement_class->change_state = gst_gz_dec_change_state;
+        gstelement_class->change_state = gst_gz_dec_change_state;
 }
 
 /* initialize the new element
@@ -153,125 +153,125 @@ gst_gz_dec_class_init (GstGzDecClass * klass)
 static void
 gst_gz_dec_init (GstGzDec * filter)
 {
-	filter->sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
-	gst_pad_set_event_function (filter->sinkpad,
-	                            GST_DEBUG_FUNCPTR(gst_gz_dec_sink_event));
-	gst_pad_set_chain_function (filter->sinkpad,
-	                            GST_DEBUG_FUNCPTR(gst_gz_dec_chain));
-	GST_PAD_SET_PROXY_CAPS (filter->sinkpad);
-	gst_element_add_pad (GST_ELEMENT (filter), filter->sinkpad);
+        filter->sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
+        gst_pad_set_event_function (filter->sinkpad,
+                                    GST_DEBUG_FUNCPTR(gst_gz_dec_sink_event));
+        gst_pad_set_chain_function (filter->sinkpad,
+                                    GST_DEBUG_FUNCPTR(gst_gz_dec_chain));
+        GST_PAD_SET_PROXY_CAPS (filter->sinkpad);
+        gst_element_add_pad (GST_ELEMENT (filter), filter->sinkpad);
 
-	filter->srcpad = gst_pad_new_from_static_template (&src_factory, "src");
-	GST_PAD_SET_PROXY_CAPS (filter->srcpad);
-	gst_element_add_pad (GST_ELEMENT (filter), filter->srcpad);
+        filter->srcpad = gst_pad_new_from_static_template (&src_factory, "src");
+        GST_PAD_SET_PROXY_CAPS (filter->srcpad);
+        gst_element_add_pad (GST_ELEMENT (filter), filter->srcpad);
 
-	// EOS event store
-	filter->pending_eos = NULL;
-	// queueing state flags
-	filter->input_task_resume = FALSE;
-	filter->srcpad_task_resume = FALSE;
-	// Queues
-	filter->input_queue = g_queue_new();
-	filter->output_queue = g_queue_new();
-	// Init locks
-	g_mutex_init(&filter->input_queue_mutex);
-	g_mutex_init(&filter->output_queue_mutex);
-	REC_MUTEX_INIT(&filter->input_task_mutex);
-	// queueing conds
-	g_cond_init(&filter->input_queue_run_cond);
-	g_cond_init(&filter->output_queue_run_cond);
+        // EOS event store
+        filter->pending_eos = NULL;
+        // queueing state flags
+        filter->input_task_resume = FALSE;
+        filter->srcpad_task_resume = FALSE;
+        // Queues
+        filter->input_queue = g_queue_new();
+        filter->output_queue = g_queue_new();
+        // Init locks
+        g_mutex_init(&filter->input_queue_mutex);
+        g_mutex_init(&filter->output_queue_mutex);
+        REC_MUTEX_INIT(&filter->input_task_mutex);
+        // queueing conds
+        g_cond_init(&filter->input_queue_run_cond);
+        g_cond_init(&filter->output_queue_run_cond);
 
-	GST_INFO_OBJECT(filter, "Done initializing element");
+        GST_INFO_OBJECT(filter, "Done initializing element");
 }
 
 static void
 gst_gz_dec_set_property (GObject * object, guint prop_id,
                          const GValue * value, GParamSpec * pspec)
 {
-	switch (prop_id) {
-	default:
-		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-		break;
-	}
+        switch (prop_id) {
+        default:
+                G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+                break;
+        }
 }
 
 static void
 gst_gz_dec_get_property (GObject * object, guint prop_id,
                          GValue * value, GParamSpec * pspec)
 {
-	switch (prop_id) {
-	default:
-		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-		break;
-	}
+        switch (prop_id) {
+        default:
+                G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+                break;
+        }
 }
 
 static GstStateChangeReturn
 gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
 {
-	GstGzDec *filter = GST_GZDEC (element);
+        GstGzDec *filter = GST_GZDEC (element);
 
-	GstState current = GST_STATE_TRANSITION_CURRENT(transition);
-	GstState next = GST_STATE_TRANSITION_NEXT(transition);
+        GstState current = GST_STATE_TRANSITION_CURRENT(transition);
+        GstState next = GST_STATE_TRANSITION_NEXT(transition);
 
-	GST_INFO_OBJECT (element, "Transition from %s to %s",
-	                 gst_element_state_get_name (current),
-	                 gst_element_state_get_name (next));
+        GST_INFO_OBJECT (element, "Transition from %s to %s",
+                         gst_element_state_get_name (current),
+                         gst_element_state_get_name (next));
 
-	switch(transition) {
-	case GST_STATE_CHANGE_NULL_TO_READY:
-		// Initialize things
-		GST_OBJECT_LOCK(filter);
-		// reset EOS flag
-		filter->eos = FALSE;
-		// create input task
-		filter->input_task = CREATE_TASK(input_task_func, filter);
-		GST_OBJECT_UNLOCK(filter);
-		gst_task_set_lock(filter->input_task, &filter->input_task_mutex);
-		// Pre-warm our input processing worker
-		gst_task_pause(filter->input_task);
-		break;
-	case GST_STATE_CHANGE_READY_TO_PAUSED:
-		// Pre-process input data to have prerolled data
-		// on output when we go to play
-		input_task_start(filter);
-		// Weird! we need this to startup, but it should only be necessary in PLAYING state, no?
-		srcpad_task_start(filter);
-		break;
-	case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
-		// We're playing, start srcpad streaming task!
-		srcpad_task_start(filter);
-		break;
-	case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
-		// this will be syncroneous
-		srcpad_task_pause(filter);
-		break;
-	case GST_STATE_CHANGE_PAUSED_TO_READY:
-		// We might have never reached playing state, in this
-		// case we want to pause the srcpad task from here!
-		// Pausing srcpad streaming task (this will be syncroneous!)
-		srcpad_task_pause(filter);
-		// Pause input processing worker (blocking/sync)
-		input_task_pause(filter);
-		break;
-	case GST_STATE_CHANGE_READY_TO_NULL:
-		// This will actually join all the task threads
-		// (but the tasks are re-usable)
-		srcpad_task_join(filter);
-		input_task_join(filter);
-		// clean up decoder
-		if (filter->decoder) {
-			clear_decoder(filter);
-		}
-		// clean up task object
-		if (filter->input_task) {
-			g_object_unref(filter->input_task);
-			filter->input_task = NULL;
-		}
-		break;
-	}
+        switch(transition) {
+        case GST_STATE_CHANGE_NULL_TO_READY:
+                // Initialize things
+                GST_OBJECT_LOCK(filter);
+                // reset EOS flag
+                filter->eos = FALSE;
+                // create input task
+                filter->input_task = CREATE_TASK(input_task_func, filter);
+                GST_OBJECT_UNLOCK(filter);
+                gst_task_set_lock(filter->input_task, &filter->input_task_mutex);
+                // Pre-warm our input processing worker
+                gst_task_pause(filter->input_task);
+                break;
+        case GST_STATE_CHANGE_READY_TO_PAUSED:
+                // Pre-process input data to have prerolled data
+                // on output when we go to play
+                input_task_start(filter);
+                // Weird! we need this to startup, but it should only be necessary in PLAYING state, no?
+                srcpad_task_start(filter);
+                break;
+        case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
+                // We're playing, start srcpad streaming task!
+                srcpad_task_start(filter);
+                break;
+        case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+                // this will be syncroneous
+                srcpad_task_pause(filter);
+                break;
+        case GST_STATE_CHANGE_PAUSED_TO_READY:
+                // We might have never reached playing state, in this
+                // case we want to pause the srcpad task from here!
+                // Pausing srcpad streaming task (this will be syncroneous!)
+                srcpad_task_pause(filter);
+                // Pause input processing worker (blocking/sync)
+                input_task_pause(filter);
+                break;
+        case GST_STATE_CHANGE_READY_TO_NULL:
+                // This will actually join all the task threads
+                // (but the tasks are re-usable)
+                srcpad_task_join(filter);
+                input_task_join(filter);
+                // clean up decoder
+                if (filter->decoder) {
+                        clear_decoder(filter);
+                }
+                // clean up task object
+                if (filter->input_task) {
+                        g_object_unref(filter->input_task);
+                        filter->input_task = NULL;
+                }
+                break;
+        }
 
-	return GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
+        return GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
 }
 
 /* GstElement vmethod implementations */
@@ -280,46 +280,46 @@ gst_gz_dec_change_state (GstElement *element, GstStateChange transition)
 static gboolean
 gst_gz_dec_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 {
-	GstGzDec *filter = GST_GZDEC (parent);
-	gboolean ret;
+        GstGzDec *filter = GST_GZDEC (parent);
+        gboolean ret;
 
-	GST_LOG_OBJECT (filter, "Received %s event: %" GST_PTR_FORMAT,
-	                GST_EVENT_TYPE_NAME (event), event);
+        GST_LOG_OBJECT (filter, "Received %s event: %" GST_PTR_FORMAT,
+                        GST_EVENT_TYPE_NAME (event), event);
 
-	switch (GST_EVENT_TYPE (event)) {
-	case GST_EVENT_STREAM_START:
+        switch (GST_EVENT_TYPE (event)) {
+        case GST_EVENT_STREAM_START:
 
-		filter->stream_start_fill
-		        = filter->stream_start[0]
-		                  = filter->stream_start[1] = 0;
-		filter->eos = FALSE;
+                filter->stream_start_fill
+                        = filter->stream_start[0]
+                                  = filter->stream_start[1] = 0;
+                filter->eos = FALSE;
 
-		ret = gst_pad_event_default (pad, parent, event);
-		break;
-	case GST_EVENT_EOS:
-		GST_OBJECT_LOCK(filter);
-		filter->pending_eos = event;
-		GST_OBJECT_UNLOCK(filter);
-		// the queue might be waiting at this point
-		// even if there is no data to process
-		// we want it to pick up this EOS signal
-		input_queue_signal_resume (filter);
+                ret = gst_pad_event_default (pad, parent, event);
+                break;
+        case GST_EVENT_EOS:
+                GST_OBJECT_LOCK(filter);
+                filter->pending_eos = event;
+                GST_OBJECT_UNLOCK(filter);
+                // the queue might be waiting at this point
+                // even if there is no data to process
+                // we want it to pick up this EOS signal
+                input_queue_signal_resume (filter);
 
-		ret = TRUE;
-		break;
-	case GST_EVENT_CAPS:
-	{
-		GstCaps * caps;
-		gst_event_parse_caps (event, &caps);
+                ret = TRUE;
+                break;
+        case GST_EVENT_CAPS:
+        {
+                GstCaps * caps;
+                gst_event_parse_caps (event, &caps);
 
-		ret = gst_pad_event_default (pad, parent, event);
-		break;
-	}
-	default:
-		ret = gst_pad_event_default (pad, parent, event);
-		break;
-	}
-	return ret;
+                ret = gst_pad_event_default (pad, parent, event);
+                break;
+        }
+        default:
+                ret = gst_pad_event_default (pad, parent, event);
+                break;
+        }
+        return ret;
 }
 
 /* chain function
@@ -328,29 +328,29 @@ gst_gz_dec_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 static GstFlowReturn
 gst_gz_dec_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 {
-	GstGzDec *filter;
+        GstGzDec *filter;
 
-	filter = GST_GZDEC (parent);
+        filter = GST_GZDEC (parent);
 
-	GST_TRACE_OBJECT(filter, "Entering chain function: %" GST_PTR_FORMAT, buf);
+        GST_TRACE_OBJECT(filter, "Entering chain function: %" GST_PTR_FORMAT, buf);
 
-	if (G_UNLIKELY(!filter->decoder)) {
-		try_feed_stream_start(filter, buf);
-	}
+        if (G_UNLIKELY(!filter->decoder)) {
+                try_feed_stream_start(filter, buf);
+        }
 
-	g_assert(filter->decoder != NULL);
+        g_assert(filter->decoder != NULL);
 
-	// once task is paused sooner or later
-	// we should be able to take the worker lock
-	GST_TRACE_OBJECT(filter, "Appending input buffer of %d bytes", (int) BUFFER_SIZE(buf));
-	input_queue_append_buffer(filter, buf);
-	// To avoid any races between the task feeding us here
-	// and the worker thread let's set the state to started
-	// and then only release the lock.
-	GST_TRACE_OBJECT(filter, "Leaving chain function");
+        // once task is paused sooner or later
+        // we should be able to take the worker lock
+        GST_TRACE_OBJECT(filter, "Appending input buffer of %d bytes", (int) BUFFER_SIZE(buf));
+        input_queue_append_buffer(filter, buf);
+        // To avoid any races between the task feeding us here
+        // and the worker thread let's set the state to started
+        // and then only release the lock.
+        GST_TRACE_OBJECT(filter, "Leaving chain function");
 
-	/* just push out the incoming buffer without touching it */
-	return GST_FLOW_OK;
+        /* just push out the incoming buffer without touching it */
+        return GST_FLOW_OK;
 }
 
 
@@ -361,15 +361,15 @@ gst_gz_dec_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 static gboolean
 gzdec_init (GstPlugin * gzdec)
 {
-	/* debug category for fltering log messages
-	 *
-	 * exchange the string 'Template gzdec' with your description
-	 */
-	GST_DEBUG_CATEGORY_INIT (gst_gz_dec_debug, "gzdec",
-	                         0, "Template gzdec");
+        /* debug category for fltering log messages
+         *
+         * exchange the string 'Template gzdec' with your description
+         */
+        GST_DEBUG_CATEGORY_INIT (gst_gz_dec_debug, "gzdec",
+                                 0, "Template gzdec");
 
-	return gst_element_register (gzdec, "gzdec", GST_RANK_NONE,
-	                             GST_TYPE_GZDEC);
+        return gst_element_register (gzdec, "gzdec", GST_RANK_NONE,
+                                     GST_TYPE_GZDEC);
 }
 
 /* PACKAGE: this is usually set by autotools depending on some _INIT macro
