@@ -334,7 +334,7 @@ gst_gz_dec_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
   GST_TRACE_OBJECT(filter, "Entering chain function: %" GST_PTR_FORMAT, buf);
 
-  if (!filter->decoder) {
+  if (G_UNLIKELY(!filter->decoder)) {
     try_feed_stream_start(filter, buf);
   }
 

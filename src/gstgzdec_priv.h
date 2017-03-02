@@ -47,7 +47,7 @@ try_feed_stream_start(GstGzDec* filter, GstBuffer* buf)
   guchar *data;
   guint size;
 
-  if (filter->stream_start_fill == sizeof(filter->stream_start)) {
+  if (G_LIKELY(filter->stream_start_fill == sizeof(filter->stream_start))) {
     return;
   }
 
@@ -290,12 +290,9 @@ static void process_one_input_buffer (GstGzDec* filter, GstBuffer* buf) {
 
 	GST_TRACE_OBJECT (filter, "Processing one input buffer: %" GST_PTR_FORMAT, buf);
 
-	// DO ACTUAL PROCESSING HERE!!
-
-	filter->decode_func(filter->decoder, buf);
-
-	//////////////////////////////
-	//////////////////////////////
+	if (!filter->decode_func(filter->decoder, buf)) {
+		GST_ERROR("Failed to decode: %" GST_PTR_FORMAT, buf);
+	}
 }
 
 static void input_task_func (gpointer data) {
@@ -308,7 +305,10 @@ static void input_task_func (gpointer data) {
 
 	buf = input_queue_pop_buffer (filter);
  	if (buf != NULL) {
-		process_one_input_buffer(filter, buf);	
+ 		// takes ownership of the buffer
+		process_one_input_buffer(filter, buf);
+		// we can get rid of it now
+		gst_buffer_unref(buf);	
 	} else {
 		// OPTIMIZABLE: this will run one iteration later than it could
 		GST_OBJECT_LOCK(filter);
