@@ -378,7 +378,7 @@ gzdec_init (GstPlugin * gzdec)
  * compile this code. GST_PLUGIN_DEFINE needs PACKAGE to be defined.
  */
 #ifndef PACKAGE
-#define PACKAGE "myfirstgzdec"
+#define PACKAGE "gzdec"
 #endif
 
 /* gstreamer looks for this structure to register gzdecs
