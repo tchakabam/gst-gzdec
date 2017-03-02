@@ -27,14 +27,14 @@ void buffer_set_data (GstBuffer* buf, gpointer data, gsize size) {
         #define CREATE_TASK(func, data) gst_task_new(func, data, NULL) // just monkey-patch this
         #define BUFFER_SET_DATA(buf, data, size) buffer_set_data(buf, data, size)
         #define BUFFER_ALLOC(size) gst_buffer_new_allocate(NULL, size, NULL)
-  #define BUFFER_SIZE gst_buffer_get_size
+        #define BUFFER_SIZE gst_buffer_get_size
 
 #else // fallback to default: GStreamer 0.10.x API
 
         #define CREATE_TASK(func, data) gst_task_create(func, data)
         #define BUFFER_SET_DATA(buf, data, size) gst_buffer_set_data(buf, data, size)
         #define BUFFER_ALLOC(size) gst_buffer_new_and_alloc(size)
-  #define BUFFER_SIZE GST_BUFFER_SIZE
+        #define BUFFER_SIZE GST_BUFFER_SIZE
 
 #endif
 
@@ -46,6 +46,6 @@ typedef GStaticRecMutex MUTEX;
 #else
 typedef GRecMutex MUTEX;
         #define REC_MUTEX_LOCK g_rec_mutex_lock
-  #define REC_MUTEX_UNLOCK g_rec_mutex_unlock
+        #define REC_MUTEX_UNLOCK g_rec_mutex_unlock
         #define REC_MUTEX_INIT g_rec_mutex_init
 #endif
