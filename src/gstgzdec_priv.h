@@ -37,85 +37,85 @@ static void setup_decoder (GstGzDec* filter, void* stream_writer_func);
 // Just an adapter function resulting from the abstraction
 static void
 stream_writer_func (gpointer user_data, gpointer data, gsize bytes) {
-  output_queue_append_data (user_data, data, bytes);
+	output_queue_append_data (user_data, data, bytes);
 }
 
 static void
 try_feed_stream_start(GstGzDec* filter, GstBuffer* buf)
 {
-  GstMapInfo map;
-  guchar *data;
-  guint size;
+	GstMapInfo map;
+	guchar *data;
+	guint size;
 
-  if (G_LIKELY(filter->stream_start_fill == sizeof(filter->stream_start))) {
-    return;
-  }
-
-#ifdef USE_GSTREAMER_1_DOT_0_API
-  if(!gst_buffer_map(buf, &map, GST_MAP_READ)) {
-    GST_ERROR("Error mapping for read access");
-    return;
-  }
-  data = map.data;
-  size = map.size;
-#endif
-
-  for (;filter->stream_start_fill < sizeof(filter->stream_start) 
-    && filter->stream_start_fill < size; 
-    filter->stream_start_fill++) {
-    filter->stream_start[filter->stream_start_fill] = data[filter->stream_start_fill];
-  }
-
-  GST_DEBUG ("Got stream starting chars: %x %x", filter->stream_start[0], filter->stream_start[1]);
+	if (G_LIKELY(filter->stream_start_fill == sizeof(filter->stream_start))) {
+		return;
+	}
 
 #ifdef USE_GSTREAMER_1_DOT_0_API
-  gst_buffer_unmap(buf, &map);
+	if(!gst_buffer_map(buf, &map, GST_MAP_READ)) {
+		GST_ERROR("Error mapping for read access");
+		return;
+	}
+	data = map.data;
+	size = map.size;
 #endif
 
-  g_assert(filter->decoder == NULL);
+	for (; filter->stream_start_fill < sizeof(filter->stream_start)
+	     && filter->stream_start_fill < size;
+	     filter->stream_start_fill++) {
+		filter->stream_start[filter->stream_start_fill] = data[filter->stream_start_fill];
+	}
 
-  if (filter->stream_start_fill == sizeof(filter->stream_start)) {
+	GST_DEBUG ("Got stream starting chars: %x %x", filter->stream_start[0], filter->stream_start[1]);
 
-    GST_INFO ("Setup decoder");
+#ifdef USE_GSTREAMER_1_DOT_0_API
+	gst_buffer_unmap(buf, &map);
+#endif
 
-    setup_decoder(filter, stream_writer_func);
-  }
-} 
+	g_assert(filter->decoder == NULL);
 
-/* 
- We could have used a typefind element to figure this out as well, and potentially
- "cover more cases" but again we chose solution which for our concrete use-case
- necessites less code. It is also easily extensible to peek in further or test other
- stream types. Substantially it works like a typefind less the generic re-usability across
- other elements for it. Using existing typefind functions for these formats would have
- been possible but in this case not offering any substantial advantage 
- (except if one would like to do something with the caps, which we dont).
-*/
+	if (filter->stream_start_fill == sizeof(filter->stream_start)) {
+
+		GST_INFO ("Setup decoder");
+
+		setup_decoder(filter, stream_writer_func);
+	}
+}
+
+/*
+   We could have used a typefind element to figure this out as well, and potentially
+   "cover more cases" but again we chose solution which for our concrete use-case
+   necessites less code. It is also easily extensible to peek in further or test other
+   stream types. Substantially it works like a typefind less the generic re-usability across
+   other elements for it. Using existing typefind functions for these formats would have
+   been possible but in this case not offering any substantial advantage
+   (except if one would like to do something with the caps, which we dont).
+ */
 static gboolean stream_is_bzip(GstGzDec* filter) {
 	return filter->stream_start[0] == 0x42
-		&& filter->stream_start[1] == 0x5a;
+	       && filter->stream_start[1] == 0x5a;
 }
 
 static gboolean stream_is_gzip(GstGzDec* filter) {
 	return filter->stream_start[0] == 0x78
-		&& filter->stream_start[1] == 0xffffff9c;
+	       && filter->stream_start[1] == 0xffffff9c;
 }
 
 /*
-	This is the factory that will create the necessary decoder implementation instance
-	and setup the according decoding function.
+        This is the factory that will create the necessary decoder implementation instance
+        and setup the according decoding function.
 
-	We could have gone with a full-fledged abstract-class pattern declared on the decoder's side, 
-	and the call that classe's functions will would redirect to the class implementation (virtual functions GObject style),
-	but it seemed a bit over-engineered for this tiny case with only one function type to abstract (GstGzDecFunc).
-	Therefore we simply initialize the instance and function pointers here as part of
-	the actual element's state. This allows the same flexibility at runtime for less framework code.
-*/
+        We could have gone with a full-fledged abstract-class pattern declared on the decoder's side,
+        and the call that classe's functions will would redirect to the class implementation (virtual functions GObject style),
+        but it seemed a bit over-engineered for this tiny case with only one function type to abstract (GstGzDecFunc).
+        Therefore we simply initialize the instance and function pointers here as part of
+        the actual element's state. This allows the same flexibility at runtime for less framework code.
+ */
 static void setup_decoder (GstGzDec* filter, void* stream_writer_func) {
 
-	GST_DEBUG ("Got stream starting chars: %x %x", 
-			filter->stream_start[0], 
-			filter->stream_start[1]);
+	GST_DEBUG ("Got stream starting chars: %x %x",
+	           filter->stream_start[0],
+	           filter->stream_start[1]);
 
 	g_assert(!filter->decoder);
 
@@ -153,19 +153,19 @@ void clear_decoder(GstGzDec* filter) {
 }
 
 static void input_queue_signal_resume (GstGzDec* filter) {
-    INPUT_QUEUE_LOCK(filter);
-    // the queue might be empty
-    filter->input_task_resume = TRUE;
-    INPUT_QUEUE_SIGNAL(filter);
-    INPUT_QUEUE_UNLOCK(filter);
+	INPUT_QUEUE_LOCK(filter);
+	// the queue might be empty
+	filter->input_task_resume = TRUE;
+	INPUT_QUEUE_SIGNAL(filter);
+	INPUT_QUEUE_UNLOCK(filter);
 }
 
 static void output_queue_signal_resume (GstGzDec* filter) {
-    OUTPUT_QUEUE_LOCK(filter);
-    // the queue might be empty
-    filter->srcpad_task_resume = TRUE;
-    OUTPUT_QUEUE_SIGNAL(filter);
-    OUTPUT_QUEUE_UNLOCK(filter);
+	OUTPUT_QUEUE_LOCK(filter);
+	// the queue might be empty
+	filter->srcpad_task_resume = TRUE;
+	OUTPUT_QUEUE_SIGNAL(filter);
+	OUTPUT_QUEUE_UNLOCK(filter);
 }
 
 static void input_task_start(GstGzDec* filter) {
@@ -173,57 +173,57 @@ static void input_task_start(GstGzDec* filter) {
 }
 
 static void input_task_pause(GstGzDec* filter) {
-    gst_task_pause(filter->input_task);
-    input_queue_signal_resume (filter);
-    // aquire input stream lock to make this
-    // blocks until we are actually paused
-    REC_MUTEX_LOCK(GST_TASK_GET_LOCK(filter->input_task));
-    REC_MUTEX_UNLOCK(GST_TASK_GET_LOCK(filter->input_task));
+	gst_task_pause(filter->input_task);
+	input_queue_signal_resume (filter);
+	// aquire input stream lock to make this
+	// blocks until we are actually paused
+	REC_MUTEX_LOCK(GST_TASK_GET_LOCK(filter->input_task));
+	REC_MUTEX_UNLOCK(GST_TASK_GET_LOCK(filter->input_task));
 }
 
 static void input_task_join(GstGzDec* filter) {
-    gst_task_stop(filter->input_task);
-    input_queue_signal_resume (filter);
-    gst_task_join(filter->input_task);
+	gst_task_stop(filter->input_task);
+	input_queue_signal_resume (filter);
+	gst_task_join(filter->input_task);
 }
 
 static void srcpad_task_start(GstGzDec* filter) {
-  GST_INFO_OBJECT (filter, "Starting srcpad task");
-  gst_pad_start_task (filter->srcpad, srcpad_task_func, filter, NULL); 
+	GST_INFO_OBJECT (filter, "Starting srcpad task");
+	gst_pad_start_task (filter->srcpad, srcpad_task_func, filter, NULL);
 }
 
 static void srcpad_task_pause(GstGzDec* filter) {
-  GST_INFO_OBJECT (filter, "Setting srcpad task to paused");
-  gst_task_pause (GST_PAD_TASK(filter->srcpad));
-  output_queue_signal_resume (filter);
-  // this will just make sure we block until 
-  // the task is actually done as this
-  // function acquires the stream lock
-  gst_pad_pause_task(filter->srcpad);
+	GST_INFO_OBJECT (filter, "Setting srcpad task to paused");
+	gst_task_pause (GST_PAD_TASK(filter->srcpad));
+	output_queue_signal_resume (filter);
+	// this will just make sure we block until
+	// the task is actually done as this
+	// function acquires the stream lock
+	gst_pad_pause_task(filter->srcpad);
 }
 
 static void srcpad_task_join(GstGzDec* filter) {
-  GST_INFO_OBJECT (filter, "Setting srcpad task to stopped");
-  // this looks hackish but we can't use 
-  // the actual pad function as it will
-  // need to acquire the task lock which
-  // will only be released after we signaled the task
-  gst_task_stop (GST_PAD_TASK(filter->srcpad));
-  output_queue_signal_resume (filter);
-  // properly shutdown the pad task here now
-  // this will join the thread
-  gst_pad_stop_task(filter->srcpad);
+	GST_INFO_OBJECT (filter, "Setting srcpad task to stopped");
+	// this looks hackish but we can't use
+	// the actual pad function as it will
+	// need to acquire the task lock which
+	// will only be released after we signaled the task
+	gst_task_stop (GST_PAD_TASK(filter->srcpad));
+	output_queue_signal_resume (filter);
+	// properly shutdown the pad task here now
+	// this will join the thread
+	gst_pad_stop_task(filter->srcpad);
 }
 
 static void push_one_output_buffer (GstGzDec* filter, GstBuffer* buf) {
 
 	GST_TRACE_OBJECT (filter, "Pushing one buffer");
 
- 	GstFlowReturn ret = gst_pad_push (filter->srcpad, buf);
+	GstFlowReturn ret = gst_pad_push (filter->srcpad, buf);
 
- 	if (ret != GST_FLOW_OK) {
- 		GST_ERROR_OBJECT (filter, "Flow returned: %s", gst_flow_get_name (ret));
- 	}
+	if (ret != GST_FLOW_OK) {
+		GST_ERROR_OBJECT (filter, "Flow returned: %s", gst_flow_get_name (ret));
+	}
 }
 
 static void srcpad_check_pending_eos (GstGzDec* filter) {
@@ -297,18 +297,18 @@ static void process_one_input_buffer (GstGzDec* filter, GstBuffer* buf) {
 
 static void input_task_func (gpointer data) {
 
- 	GstGzDec *filter = GST_GZDEC (data);
- 	GstBuffer* buf;
- 	gboolean eos = FALSE;
+	GstGzDec *filter = GST_GZDEC (data);
+	GstBuffer* buf;
+	gboolean eos = FALSE;
 
 	GST_TRACE_OBJECT(filter, "Entering input task function. Waiting for queue access ...");
 
 	buf = input_queue_pop_buffer (filter);
- 	if (buf != NULL) {
- 		// takes ownership of the buffer
+	if (buf != NULL) {
+		// takes ownership of the buffer
 		process_one_input_buffer(filter, buf);
 		// we can get rid of it now
-		gst_buffer_unref(buf);	
+		gst_buffer_unref(buf);
 	} else {
 		// OPTIMIZABLE: this will run one iteration later than it could
 		GST_OBJECT_LOCK(filter);
@@ -329,8 +329,8 @@ static void input_task_func (gpointer data) {
 
 		// Wait around empty queue condition
 		INPUT_QUEUE_LOCK(filter);
-		while(g_queue_get_length(filter->input_queue) == 0 
-			&& !filter->input_task_resume) {
+		while(g_queue_get_length(filter->input_queue) == 0
+		      && !filter->input_task_resume) {
 			GST_TRACE_OBJECT(filter, "Waiting in input task func");
 			INPUT_QUEUE_WAIT(filter);
 			GST_TRACE_OBJECT(filter, "Resuming input task func");

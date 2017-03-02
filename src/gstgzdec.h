@@ -3,7 +3,7 @@
  * Copyright (C) 2005 Thomas Vander Stichele <thomas@apestaart.org>
  * Copyright (C) 2005 Ronald S. Bultje <rbultje@ronald.bitfreak.net>
  * Copyright (C) 2017 Stephan Hesse <<user@hostname.org>>
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
  * to deal in the Software without restriction, including without limitation
@@ -54,61 +54,61 @@ G_BEGIN_DECLS
 
 /* #defines don't like whitespacey bits */
 #define GST_TYPE_GZDEC \
-  (gst_gz_dec_get_type())
+        (gst_gz_dec_get_type())
 #define GST_GZDEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GZDEC,GstGzDec))
+        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GZDEC,GstGzDec))
 #define GST_GZDEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GZDEC,GstGzDecClass))
+        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GZDEC,GstGzDecClass))
 #define GST_IS_GZDEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GZDEC))
+        (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GZDEC))
 #define GST_IS_GZDEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_GZDEC))
+        (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_GZDEC))
 
-typedef struct _GstGzDec      GstGzDec;
+typedef struct _GstGzDec GstGzDec;
 typedef struct _GstGzDecClass GstGzDecClass;
 
-typedef gboolean (*GstGzDecFunc) (gpointer dec_wrapper, GstBuffer* buf);
+typedef gboolean (*GstGzDecFunc)(gpointer dec_wrapper, GstBuffer* buf);
 
 typedef enum {
-  GZIP,
-  BZIP
+	GZIP,
+	BZIP
 } GstGzDecStreamType;
 
 struct _GstGzDec
 {
-  GstElement element;
+	GstElement element;
 
-  GstPad *sinkpad, *srcpad;
+	GstPad *sinkpad, *srcpad;
 
-  GQueue *input_queue;
-  GQueue *output_queue;
+	GQueue *input_queue;
+	GQueue *output_queue;
 
-  GstTask *input_task;
-  MUTEX input_task_mutex;
+	GstTask *input_task;
+	MUTEX input_task_mutex;
 
-  GCond output_queue_run_cond;
-  GCond input_queue_run_cond;
+	GCond output_queue_run_cond;
+	GCond input_queue_run_cond;
 
-  GMutex input_queue_mutex;
-  GMutex output_queue_mutex;
+	GMutex input_queue_mutex;
+	GMutex output_queue_mutex;
 
-  GstEvent* pending_eos;
+	GstEvent* pending_eos;
 
-  gboolean eos;
-  gboolean srcpad_task_resume;
-  gboolean input_task_resume;
+	gboolean eos;
+	gboolean srcpad_task_resume;
+	gboolean input_task_resume;
 
-  gpointer decoder;
-  GstGzDecFunc decode_func;
-  GstGzDecStreamType stream_type;
+	gpointer decoder;
+	GstGzDecFunc decode_func;
+	GstGzDecStreamType stream_type;
 
-  gchar stream_start[2];
-  guint stream_start_fill;
+	gchar stream_start[2];
+	guint stream_start_fill;
 };
 
-struct _GstGzDecClass 
+struct _GstGzDecClass
 {
-  GstElementClass parent_class;
+	GstElementClass parent_class;
 };
 
 GType gst_gz_dec_get_type (void);
